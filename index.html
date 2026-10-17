@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Agent 面试复习笔记</title>
+<meta name="description" content="AI Agent 开发面试复习笔记：Function Calling、RAG、记忆、规划、多 Agent、大模型原理、实战代码与 JD 分析">
+<link rel="stylesheet" href="style.css">
+<script>(function(){var t=localStorage.getItem('agent-notes-theme');if(t)document.documentElement.setAttribute('data-theme',t)})()</script>
+</head>
+<body>
+<header class="top">
+  <button class="icon" id="menuBtn" aria-label="目录">☰</button>
+  <h1>AI Agent 面试笔记</h1>
+  <input id="search" type="search" placeholder="搜索知识点，如 RAG、tool_call_id、HyDE（按 / 聚焦）">
+  <button class="icon" id="themeBtn" aria-label="切换深浅色">◐</button>
+</header>
+<div class="layout">
+<nav class="side"><div id="toc"></div></nav>
+<main>
+<p class="intro">给自己的复习笔记：从前端转全栈，用 Python + DeepSeek 学 Agent 开发。每章分三块：<span class="pill">核心概念</span><span class="pill">面试怎么答</span><span class="pill">常见追问</span>。点开追问前先自己说一遍答案。</p>
+
+<!-- ============ 1 ============ -->
+<section class="topic" id="basics">
+<h2>1. Agent 基本原理</h2>
+<h3 id="basics-core">核心概念</h3>
+<ul>
+<li><b>Agent = 大模型 + 工具 + 循环 + 记忆。</b>普通对话是"一问一答"，Agent 是让模型反复"思考 → 行动 → 观察"，直到任务完成。</li>
+<li><b>Agent 循环（思考-行动-观察）：</b>模型根据目标和当前信息<b>思考</b>下一步；决定调用某个工具（<b>行动</b>）；程序执行工具，把结果交回给模型（<b>观察</b>）；再进入下一轮，直到模型认为可以给出最终回答。</li>
+<li><b>模型只会生成文字。</b>模型"调用工具"，其实是输出一段结构化文字（工具名 + JSON 参数）。<b>真正执行永远发生在模型外面</b>，由我们的代码完成。模型也没有记忆，每次请求都要把完整对话发过去。</li>
+</ul>
+<table>
+<tr><th>模型负责：想和决定</th><th>代码负责：记、做、管流程</th></tr>
+<tr><td>理解用户意图<br>判断要不要用工具、用哪个<br>按 Schema 生成参数<br>根据工具结果组织最终回答</td><td>提供工具说明书（JSON Schema）<br>维护 <code>messages</code>（短期记忆）<br>解析参数、真正执行工具<br>把结果以 <code>role: "tool"</code> 回传<br>控制循环、步数上限、异常处理</td></tr>
+</table>
+<p>LangChain、LangGraph 这些框架，本质上就是把右边这一列封装好了。</p>
+<h3 id="basics-answer">面试怎么答</h3>
+<div class="answer"><b>问：什么是 AI Agent？和普通的大模型调用有什么区别？</b><br>
+Agent 是以大模型为"大脑"、能自主调用工具完成多步任务的系统。普通调用是一次输入一次输出；Agent 会在一个循环里反复思考、调用工具、观察结果，直到完成目标。关键在于分工：模型只负责理解和决策，输出要调用的工具和参数；执行工具、保存记忆、控制流程都是程序在做。所以 Agent 的能力上限取决于模型的推理能力，而稳定性很大程度上取决于工程实现。</div>
+<h3 id="basics-faq">常见追问</h3>
+<details><summary>模型真的会"执行"工具吗？</summary><p>不会。模型只生成"我要调用 X，参数是 Y"这段文字，程序解析后执行，再把结果作为新消息发回去。这也是为什么工具的安全边界要由代码来管。</p></details>
+<details><summary>Agent 和 Workflow（工作流）有什么区别？</summary><p>Workflow 的步骤是代码预先写死的，可控、可预测；Agent 的下一步由模型动态决定，灵活但不稳定。实际项目常常混用：主干流程用工作流固定，局部需要灵活判断的地方交给 Agent。能用简单工作流解决的，不要硬上 Agent。</p></details>
+<details><summary>什么时候不该用 Agent？</summary><p>任务步骤固定、对准确率和延迟要求很高、或者成本敏感时。Agent 多轮调用模型，慢、贵、而且结果有随机性。</p></details>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="topic" id="fc">
+<h2>2. Function Calling（工具调用）</h2>
+<h3 id="fc-core">核心概念</h3>
+<h4>工具说明书：JSON Schema</h4>
+<pre><code>{"type": "function",
+ "function": {
+   "name": "get_question",                       // 工具名，模型会原样输出它
+   "description": "按主题从题库里取一道面试题",     // 模型靠它判断什么时候用
+   "parameters": {                               // 参数格式，用 JSON Schema 描述
+     "type": "object",
+     "properties": {"topic": {"type": "string", "enum": ["工具调用", "规划", "记忆"]}},
+     "required": ["topic"]                       // 必填字段
+   }}}</code></pre>
+<ul>
+<li><code>name</code>：工具名；<code>description</code>：写清"做什么、什么时候用"，这是模型选工具的主要依据；<code>parameters</code>：参数类型；<code>enum</code>：限定可选值；<code>required</code>：必填项。</li>
+<li>这段只是<b>描述</b>，不会执行任何东西。模型看不到你的 Python 函数，只看到这份说明书。</li>
+</ul>
+<h4>完整流程（背下来）</h4>
+<ol>
+<li>把 <b>system 提示词 + 用户输入 + tools 说明书</b>一起发给模型。</li>
+<li>模型判断需要工具时，返回 <code>tool_calls</code>：每项有 <code>id</code>、<code>function.name</code>、<code>function.arguments</code>。注意 <b><code>arguments</code> 是 JSON 字符串</b>，不是字典。模型也可能不调工具，直接回答。</li>
+<li>先把这条 <b>assistant 消息本身</b>加入 <code>messages</code>（少了它，下一步的 tool 消息就"对不上号"，接口会报错）。</li>
+<li><code>json.loads(arguments)</code> 解析参数，程序执行对应函数。</li>
+<li>把结果以 <code>{"role": "tool", "tool_call_id": call.id, "content": 结果}</code> 加回 <code>messages</code>，<code>tool_call_id</code> 必须和调用的 <code>id</code> 一致。</li>
+<li>再次请求模型，循环，直到返回里<b>没有 <code>tool_calls</code></b>，此时的 <code>content</code> 就是最终回答。</li>
+<li>用 <code>for step in range(5)</code> 之类的<b>步数上限</b>防止死循环。</li>
+</ol>
+<h4>返回的 msg 长什么样</h4>
+<pre><code>ChatCompletionMessage(          # openai 库把返回的 JSON 包装成对象，所以能用 msg.content
+    role="assistant",
+    content="I'll fetch a planning-related interview question for you.",
+    tool_calls=[ChatCompletionMessageToolCall(
+        id="call_00_xxx", type="function",
+        function=Function(name="get_question", arguments='{"topic": "规划"}'))])
+# 调试：print(msg.model_dump()) 可以以字典形式打印</code></pre>
+<ul>
+<li><b><code>content</code> 和 <code>tool_calls</code> 可以同时有值</b>（DeepSeek 调工具前常顺口说一句），有的模型此时 <code>content</code> 是 <code>None</code>。代码不能假设二者只有一个。</li>
+<li><code>messages</code> 里可以混放普通字典和这个对象，SDK 发请求前会统一序列化成 JSON。</li>
+<li>同一份代码每次输出不同，是因为生成有随机性，主要由 <code>temperature</code> 控制；需要稳定输出时调低。</li>
+</ul>
+<h4>多工具：字典分发</h4>
+<pre><code>TOOL_FUNCS = {"get_question": get_question, "record_score": record_score}
+result = TOOL_FUNCS[name](**args)   # 按模型给的名字找函数；**args 把字典拆成关键字参数</code></pre>
+<p>加新工具只需在字典里加一行。几乎所有框架内部都是这么做的。实际项目里要处理"名字不存在"的情况（返回错误信息给模型，而不是让程序崩溃）。</p>
+<h4>什么该做成工具</h4>
+<ul>
+<li><b>私有数据</b>：公司题库、用户历史、内部文档，模型训练时没见过。</li>
+<li><b>实时信息</b>：天气、股价、最新版本号，模型知识有截止日期。</li>
+<li><b>真实操作</b>：写数据库、发邮件、调接口，模型只会生成文字。</li>
+<li><b>需要可控一致</b>：要保证质量、去重、难度可控的内容。</li>
+</ul>
+<p>判断标准：<b>模型靠自己的知识能做好的，就让它直接答；需要外部数据或真实动作的，才做成工具。</b></p>
+<h3 id="fc-answer">面试怎么答</h3>
+<div class="answer"><b>问：讲一下 Function Calling 的原理。</b><br>
+Function Calling 是让模型以结构化格式表达"要调用哪个函数、传什么参数"的能力，是模型在训练阶段专门学过的。流程是：程序把 system、用户消息和用 JSON Schema 描述的工具列表一起发给模型；模型如果判断需要工具，就返回 tool_calls，里面有工具名和 JSON 字符串形式的参数；程序把这条 assistant 消息加入对话，解析参数并执行真实函数，把结果作为 role 为 tool 的消息、带上对应的 tool_call_id 回传；然后再请求模型，循环直到模型不再调用工具、给出最终回答。为防止死循环会设置最大步数。整个过程模型只负责决策，执行都在程序里。</div>
+<h3 id="fc-faq">常见追问</h3>
+<details><summary>模型输出的参数不合法（JSON 解析失败、缺字段、值越界）怎么办？</summary><p>arguments 本质是模型生成的文本，可能出错。① 用 Pydantic / JSON Schema 校验；② 校验失败时把错误信息作为 tool 结果回传给模型，让它<b>重试</b>（设重试上限）；③ 用 strict 模式 / 结构化输出 / <b>约束解码</b>（生成时只允许符合 Schema 的 token），从源头保证格式；④ 用 enum、明确的 description 降低出错率。</p></details>
+<details><summary>工具很多（几十上百个）时怎么办？</summary><p>全部塞进请求会占大量上下文、增加成本，模型也更容易选错。做法：先<b>检索工具</b>（把工具描述向量化，按用户问题召回最相关的几个再交给模型），或按场景分组/路由，或拆给多个子 Agent，每个只管一组工具。</p></details>
+<details><summary>模型一次返回多个 tool_calls 怎么处理？</summary><p>这叫并行工具调用。逐个（或并发）执行，每个结果都单独回传一条 tool 消息，各自带上对应的 tool_call_id。</p></details>
+<details><summary>工具执行报错了怎么办？</summary><p>捕获异常，把错误信息作为工具结果返回给模型，让模型决定换参数重试或换方案；同时设置超时和重试上限，避免卡死。</p></details>
+<details><summary>为什么要把 assistant 那条带 tool_calls 的消息也加入 messages？</summary><p>接口要求每条 tool 消息前面必须有对应的 assistant tool_calls 消息，模型才知道这个结果是回应哪次调用的。漏掉会报错。</p></details>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="topic" id="prompt">
+<h2>3. 提示词与流程控制</h2>
+<h3 id="prompt-core">核心概念</h3>
+<ul>
+<li><b>system 提示词</b>设定角色、规则和流程，例如"一次只问一题；答完先调 record_score 打分再点评；低于 7 分针对遗漏追问，否则换题"。代码里没有写 if，模型自己按这段话决定调哪个工具。</li>
+<li><b>没写清楚的地方，模型就会自由发挥。</b>例：只说"出一道题"，模型有时会"好心"附带参考答案；想固定行为就写明"只出题，不要给答案"。</li>
+<li><b>提示词控制：灵活但不可靠</b>（模型偶尔不按流程走）；<b>代码控制：可靠但不灵活</b>。关键步骤（必须打分、必须鉴权、扣款）要用代码强制，例如用户回答后由代码直接调用评分，或用 LangGraph 固定节点顺序。</li>
+<li>好提示词的要素：角色、任务、步骤、约束（不要做什么）、输出格式、示例（few-shot）。</li>
+</ul>
+<h3 id="prompt-answer">面试怎么答</h3>
+<div class="answer"><b>问：你怎么保证 Agent 按预期流程执行？</b><br>
+分两层。一层是提示词：在 system 里写清楚角色、步骤、约束和输出格式，必要时给示例，这能覆盖大部分情况。但提示词只是"建议"，模型有概率不遵守，所以对必须保证的关键步骤，我会把它放到代码里控制，比如用状态机或 LangGraph 固定节点顺序，用结构化输出加校验保证格式。原则是：灵活判断交给模型，硬性规则交给代码。</div>
+<h3 id="prompt-faq">常见追问</h3>
+<details><summary>什么是 Context Engineering（上下文工程）？</summary><p>比提示词工程更宽：不只是写好一句提示，而是设计每次请求里放什么——system 规则、检索到的资料、记忆、工具列表、历史摘要——以及放多少、怎么排序，让模型在有限的上下文里拿到最需要的信息。</p></details>
+<details><summary>怎么让模型输出稳定的 JSON？</summary><p>用模型的 JSON mode / 结构化输出 / Function Calling；在提示词里给出格式示例；降低 temperature；程序端用 Pydantic 校验，失败则带着错误重试。</p></details>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="topic" id="plan">
+<h2>4. 规划与推理</h2>
+<h3 id="plan-core">核心概念</h3>
+<table>
+<tr><th>方法</th><th>做法</th><th>优点</th><th>缺点</th></tr>
+<tr><td><b>CoT</b> 思维链</td><td>让模型"一步一步想"，先写推理过程再给答案</td><td>简单，提升推理题准确率</td><td>只是思考，不和外界交互</td></tr>
+<tr><td><b>ReAct</b></td><td>Reason + Act 交替：想一步 → 调工具 → 看结果 → 再想</td><td>灵活，能根据结果随时调整</td><td>每步都调模型，慢、贵；长任务容易跑偏或绕圈</td></tr>
+<tr><td><b>Plan-and-Execute</b></td><td>先让模型列完整计划，再逐步执行（执行可用更小的模型），必要时重新规划</td><td>全局清晰，步骤可控、省成本</td><td>计划一开始错了不易发现，适应性弱于 ReAct</td></tr>
+<tr><td><b>Reflection / Reflexion</b></td><td>完成后让模型（或另一个模型）检查结果、指出问题再改；Reflexion 还把失败经验写成文字记忆用于下次尝试</td><td>提升质量，能自我纠错</td><td>多轮调用，成本和延迟增加</td></tr>
+</table>
+<p><b>怎么选与结合：</b>简单推理用 CoT；步骤不确定、要边查边做用 ReAct；任务长、步骤可预知用 Plan-and-Execute；对质量要求高再加 Reflection。常见组合：先规划，每个子步骤内部用 ReAct 执行，最后反思检查，失败则重新规划。我们写的那个"出题 → 评分 → 追问/换题"循环，就是一个简单的 ReAct。</p>
+<h3 id="plan-answer">面试怎么答</h3>
+<div class="answer"><b>问：ReAct 和 Plan-and-Execute 有什么区别？</b><br>
+ReAct 是推理和行动交替进行，每一步都根据上一步的观察结果决定下一步，适合步骤不确定、需要探索的任务，缺点是每步都要调用模型，长任务容易跑偏。Plan-and-Execute 先让模型制定完整计划，再按计划逐步执行，适合步骤较清晰的长任务，全局更可控、也能用小模型执行省成本，缺点是计划错了不容易纠正，所以通常会加"重新规划"环节。实际中常结合：先规划，子任务内部用 ReAct，最后再加反思校验。</div>
+<h3 id="plan-faq">常见追问</h3>
+<details><summary>Agent 陷入死循环 / 反复调用同一个工具怎么办？</summary><p>设最大步数和超时；检测重复调用（同工具同参数）并提示模型换方法；把已尝试过的内容写进上下文；必要时转人工（Human-in-the-loop）。</p></details>
+<details><summary>推理模型（如 DeepSeek-R1）和 CoT 是什么关系？</summary><p>推理模型通过强化学习训练，把"先长篇思考再回答"内化成了默认行为，相当于自带 CoT，不必再在提示词里要求"一步步想"。</p></details>
+</section>
+<!-- ============ 5 ============ -->
+<section class="topic" id="memory">
+<h2>5. 记忆</h2>
+<h3 id="memory-core">核心概念</h3>
+<ul>
+<li><b>模型本身是无状态的</b>，"记得"的前提是每次请求把需要的信息放进上下文。</li>
+<li><b>短期记忆</b>：当前会话的 <code>messages</code> 列表。把它放在函数外面、每轮追加，就实现了多轮对话。问题是它越来越长：会超出<b>上下文窗口</b>、成本（按 token 计费）和延迟都上涨。处理方法：
+  <ul><li><b>截断 / 滑动窗口</b>：只保留 system + 最近 N 轮（注意别把 tool_calls 和对应 tool 消息拆开）；</li>
+  <li><b>摘要</b>：把早期对话让模型总结成一段文字放回去；</li>
+  <li>工具结果太长时先截断或摘要再回传。</li></ul></li>
+<li><b>长期记忆</b>：跨会话保存的信息（用户偏好、"上次 RAG 答得不好"、历史分数），存在外部存储（关系库、KV、向量库）。需要时检索出来塞进提示词。写入时机可以是每轮结束后让模型抽取"值得记住的事实"。</li>
+<li>常见分类：<b>语义记忆</b>（事实，如用户是前端工程师）、<b>情景记忆</b>（过往经历/对话）、<b>程序记忆</b>（怎么做事的规则，常体现在提示词里）。</li>
+</ul>
+<h3 id="memory-answer">面试怎么答</h3>
+<div class="answer"><b>问：Agent 的短期记忆和长期记忆分别怎么实现？</b><br>
+短期记忆就是当前会话的消息列表，每次请求都完整发给模型。因为上下文窗口有限且按 token 计费，会用滑动窗口只保留最近几轮，或把早期内容总结成摘要。长期记忆是跨会话的，把用户偏好、关键事实、历史结果抽取出来存到数据库或向量库，下次对话时按相关性检索出来注入提示词。本质上长期记忆的读取就是一次 RAG。</div>
+<h3 id="memory-faq">常见追问</h3>
+<details><summary>记忆冲突或过期怎么办？</summary><p>给记忆加时间戳和来源，新信息覆盖旧信息；定期合并、去重；重要事实可以让用户确认。</p></details>
+<details><summary>上下文窗口为什么有限制？越长越好吗？</summary><p>注意力计算量随长度近似平方增长，KV Cache 显存也随长度线性增长；而且上下文越长，模型越容易忽略中间部分（lost in the middle）。所以不是越长越好，精挑细选的上下文效果更好也更便宜。</p></details>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="topic" id="rag">
+<h2>6. RAG（检索增强生成）</h2>
+<h3 id="rag-core">核心概念</h3>
+<p><b>RAG = 先查资料，再开卷作答。</b>关键纠正：<b>去资料里找的是程序，不是模型。</b>程序把问题向量化、检索出相关片段，和问题一起放进提示词，模型只负责基于这些资料组织回答。</p>
+<p><b>为什么需要：</b>模型不知道私有资料和最新信息；资料太多不能全塞进上下文；答案有出处，能减少幻觉。</p>
+<h4>四步流程</h4>
+<ol>
+<li><b>切块</b>：把文档切成小段。固定长度（如 500 字）+ 相邻块<b>重叠</b>，或按段落/标题切（语义切块）。太大检索不准，太小丢上下文。</li>
+<li><b>向量化</b>：把每块变成向量。和 fast.ai 里"像素变数字"是一个思想。</li>
+<li><b>检索</b>：问题用<b>同一个</b>模型向量化，和每块算相似度，取 top_k。</li>
+<li><b>生成</b>：把检索结果和问题拼进提示词，要求"只根据资料回答，没有就说不知道"。</li>
+</ol>
+<h4>TF-IDF vs 语义 Embedding</h4>
+<table>
+<tr><th></th><th>TF-IDF / BM25（稀疏向量）</th><th>Embedding（稠密向量）</th></tr>
+<tr><td>原理</td><td>每一维是一个字/词，值看词频（TF）× 逆文档频率（IDF）：出现多、又只在少数块里出现，值就高</td><td>神经网络训练出来的几百到上千维向量，意思相近的文字向量相近</td></tr>
+<tr><td>擅长</td><td>专有名词、型号、精确关键词</td><td>换个说法也能找到（"编排工具"→ LangGraph）</td></tr>
+<tr><td>短板</td><td>只认字面，不懂语义</td><td>精确术语、罕见词可能不准；需要模型</td></tr>
+<tr><td>例子</td><td>sklearn TfidfVectorizer、BM25（TF-IDF 改进版，考虑文档长度和词频饱和）</td><td>中文常用 bge 系列、通义 text-embedding 等</td></tr>
+</table>
+<p><b>余弦相似度</b> = 两个向量的点积 ÷ 两者长度之积，即夹角余弦，越接近 1 越相似。本质还是矩阵运算。</p>
+<h4>向量数据库与 ANN</h4>
+<p>块有几百万个时不能逐个比较（暴力搜索），要用<b>近似最近邻（ANN）</b>：牺牲一点准确率换极快速度。最常见的算法是 <b>HNSW</b>（分层可导航小世界图：多层图结构，从稀疏的上层快速定位，再到稠密的下层精确查找），还有 IVF（先聚类、只搜最近的几个簇）等。常用库：Chroma、Milvus、Qdrant、Pinecone、PostgreSQL 的 <b>pgvector</b>（JD 里出现很多）、FAISS。</p>
+<h4>检索优化（面试高频）</h4>
+<ul>
+<li><b>混合检索</b>：BM25 关键词分数 + 向量语义分数，加权合并或用 RRF（倒数排名融合）合并两路结果。关键词保证专有名词准，语义保证换说法能查到。</li>
+<li><b>Rerank 重排序</b>：先粗召回 20~50 块，再用重排模型（cross-encoder，如 bge-reranker）把问题和每块一起输入，逐个判断相关度，取前 3~5。更准但更慢，只用在少量候选上。</li>
+<li><b>元数据过滤</b>：先按条件（地区、日期、部门、权限）筛，再在范围内比相似度。</li>
+<li><b>查询改写</b>：口语化/太短的问题先让模型改写、扩展同义词，或拆成多个子问题分别检索；多轮对话中要把"它呢？"补全成完整问题。</li>
+<li><b>HyDE</b>：先让模型凭空写一个"假答案"，再用假答案去检索。答案和资料的写法更像，往往比用问题搜更准。</li>
+<li><b>小块检索、大块返回</b>（Parent Document / Small-to-Big）：用小块检索保证精准，返回时带上它所在的整段或父文档，保证上下文完整。</li>
+</ul>
+<h4>生成阶段</h4>
+<ul>
+<li><b>Lost in the middle</b>：模型对放在长上下文中间的内容容易忽略，最相关的放开头或结尾，块数别太多。</li>
+<li><b>引用出处</b>：给每块编号，要求模型标注 [1][2]，方便核对、减少编造。</li>
+</ul>
+<h4>评估</h4>
+<ul>
+<li><b>检索</b>：召回率（该找到的找到了没有）、精确率、MRR/命中率。需要准备"问题 → 应命中的块"的测试集。</li>
+<li><b>生成</b>：<b>忠实度</b>（回答是否都有资料依据，不胡编）、<b>答案相关性</b>（是否答到了问题）。</li>
+<li>工具：<b>RAGAS</b>（faithfulness、answer relevancy、context precision/recall 等指标）；也常用 <b>LLM 当裁判</b>（LLM-as-a-judge）打分，再抽样人工复核。</li>
+</ul>
+<h4>进阶变体</h4>
+<ul>
+<li><b>Agentic RAG</b>：把检索做成工具，让模型决定何时查、查什么、查几次、要不要改写关键词。我们的 <code>rag.py</code> 就是这种。传统 RAG 是每次固定先查一遍。</li>
+<li><b>GraphRAG</b>：先把资料抽取成知识图谱（实体 + 关系 + 社区摘要），适合需要综合多处信息的全局问题（"这些文档的主要主题是什么"）。代价是建图成本高。</li>
+<li><b>RAG vs 长上下文</b>：窗口变大后仍需要 RAG——资料量远超窗口、要控制成本和延迟、需要引用出处和权限控制时，RAG 更合适；资料少且固定时可以直接塞进上下文。</li>
+<li><b>RAG vs 微调</b>：知识常变、要出处 → RAG；要改变模型的风格、格式、特定任务能力 → 微调。两者可以结合。"知识用 RAG，行为用微调。"</li>
+</ul>
+<h4>文档解析</h4>
+<table>
+<tr><th>工具</th><th>特点</th></tr>
+<tr><td><b>Apache Tika</b></td><td>支持一千多种格式（PDF/Word/Excel/PPT/邮件/HTML），统一接口提取文字和元数据，稳定、企业常用。缺点：只提文字不懂结构（表格被压平、标题层级和多栏排版丢失）；扫描件需额外配 Tesseract OCR；依赖 Java 服务（Python 的 <code>tika</code> 包会自动下载启动），部署多一个组件。</td></tr>
+<tr><td><b>Unstructured</b></td><td>把文档拆成标题、段落、表格等元素，方便按结构切块。</td></tr>
+<tr><td><b>Docling</b>（IBM 开源）</td><td>转成带结构的 Markdown/JSON，表格、版面识别好。</td></tr>
+<tr><td><b>MinerU</b>（国内团队开源）</td><td>中文 PDF、公式、表格效果好。</td></tr>
+<tr><td><b>PyMuPDF</b></td><td>只处理 PDF，轻量、速度快。</td></tr>
+</table>
+<p>一句话：<b>纯文字、格式杂用 Tika；要保留表格和标题结构用 Docling / MinerU / Unstructured；只有 PDF 用 PyMuPDF。</b>资料质量直接决定 RAG 效果，这一步往往最费劲。</p>
+<h3 id="rag-answer">面试怎么答</h3>
+<div class="answer"><b>问：什么是 RAG？为什么需要它？</b><br>
+RAG 是检索增强生成。离线阶段把文档解析、切块、向量化后存进向量数据库；在线阶段程序把用户问题用同一个模型向量化，检索出最相关的几段，和问题一起放进提示词，让模型基于资料作答。它解决了模型不知道私有和最新知识的问题，避免把大量资料全塞进上下文，并且答案可以引用出处，减少幻觉。</div>
+<div class="answer"><b>问：RAG 检索不准怎么优化？</b><br>
+先看数据：文档解析是否干净、切块大小和重叠是否合适，可以用小块检索大块返回。再看检索：上混合检索（BM25 + 向量），加 Rerank 精排，用元数据过滤缩小范围，对问题做查询改写或 HyDE。最后看生成：控制块数、把最相关的放在前面、要求引用出处。整个过程要用评估集量化：检索看召回率，生成看忠实度和相关性，可以用 RAGAS 或 LLM 裁判。</div>
+<h3 id="rag-faq">常见追问</h3>
+<details><summary>切块大小怎么定？</summary><p>没有固定答案，取决于文档类型和问题粒度。常见起点 300~800 字（或 256~512 token）、重叠 10%~20%，再用评估集对比几组参数选最好的。结构清晰的文档优先按标题/段落切。</p></details>
+<details><summary>换了 Embedding 模型要做什么？</summary><p>整个库都要重新向量化。不同模型的向量空间不兼容，维度也可能不同，问题和文档必须用同一个模型。</p></details>
+<details><summary>检索到的资料和问题无关，模型还硬答怎么办？</summary><p>设相似度阈值，低于阈值视为没找到；提示词要求"资料不足就说不知道"；评估忠实度；必要时让 Agent 改写问题再查一次。</p></details>
+<details><summary>多轮对话里 RAG 怎么做？</summary><p>先用模型结合历史把当前问题改写成独立完整的问题（如"那它的缺点呢？"→"HNSW 的缺点是什么？"），再去检索。</p></details>
+<details><summary>Rerank 为什么比向量检索准？</summary><p>向量检索是问题和文档分别编码再比较（bi-encoder），信息交互少但快；Rerank 是把问题和文档拼在一起输入模型（cross-encoder），能细粒度判断相关性，但每对都要算一次，所以只用在少量候选上。</p></details>
+</section>
+<!-- ============ 7 ============ -->
+<section class="topic" id="multi">
+<h2>7. 多 Agent 协作</h2>
+<h3 id="multi-core">核心概念</h3>
+<ul>
+<li><b>为什么要多个：</b>单个 Agent 工具太多、提示词太长时容易混乱。按职责拆开，每个 Agent 只有自己的提示词和少量工具，更专注、更好调试。</li>
+<li><b>常见模式：</b>
+  <ul><li><b>主管-工人（Supervisor）</b>：一个主管 Agent 拆任务、分派给专门的子 Agent，再汇总；</li>
+  <li><b>流水线（顺序）</b>：A 的输出交给 B，如"研究员 → 写作者 → 审稿人"；</li>
+  <li><b>交接（Handoff）</b>：当前 Agent 把对话转交给更合适的 Agent；</li>
+  <li><b>辩论/评审</b>：多个 Agent 互相批评，提高质量。</li></ul></li>
+<li><b>代价：</b>调用次数多、成本和延迟高；Agent 之间传递信息会丢失上下文；出错难定位。<b>能单 Agent 解决就不要多 Agent。</b></li>
+<li>框架：LangGraph（图里每个节点可以是一个 Agent）、CrewAI、AutoGen；Agent 之间的通信协议有 Google 提出的 A2A。</li>
+</ul>
+<h3 id="multi-answer">面试怎么答</h3>
+<div class="answer"><b>问：什么时候用多 Agent？怎么设计？</b><br>
+当任务包含多个差异很大的子领域、单个 Agent 的工具和提示词过于庞杂时才拆。我常用主管-工人模式：主管负责理解目标、拆解和分派，子 Agent 各自持有专用工具和提示词，结果回到主管汇总。设计时要明确每个 Agent 的输入输出格式、共享状态放在哪里、以及最大轮次和失败兜底。同时要意识到多 Agent 成本和延迟更高，调试也更难，要配合可观测工具追踪每一步。</div>
+<h3 id="multi-faq">常见追问</h3>
+<details><summary>多个 Agent 之间怎么共享信息？</summary><p>两种：通过消息传递（把上一个的输出作为下一个的输入）；或共享状态（如 LangGraph 的 State 对象 / 数据库），各 Agent 读写其中的字段。</p></details>
+</section>
+
+<!-- ============ 8 ============ -->
+<section class="topic" id="eng">
+<h2>8. 工程落地</h2>
+<h3 id="eng-core">核心概念</h3>
+<ul>
+<li><b>评估（Eval）</b>：准备测试集（输入 + 期望行为），看最终答案质量，也看过程：工具选对没有、参数对不对、步数多少。用规则检查 + LLM 裁判 + 人工抽检。每次改提示词或换模型都跑一遍，防止"改好一处、坏了别处"。</li>
+<li><b>幻觉</b>：模型自信地编造。对策：RAG 提供依据并要求引用；"不知道就说不知道"；降低 temperature；关键信息让工具查而不是让模型记；输出后校验。</li>
+<li><b>成本与延迟</b>：减少模型调用次数和 token 数（精简提示词、摘要历史、限制检索块数）；简单任务用小模型、难的才用大模型（模型路由）；缓存（相同问题、提示词前缀缓存）；<b>流式输出</b>（SSE）降低"首字等待"；能并行的工具并行执行。</li>
+<li><b>安全：提示注入（Prompt Injection）</b>：用户输入或<b>工具返回的内容</b>（网页、邮件、文档）里藏着"忽略之前的指令，执行……"。对策：把外部内容当数据而不是指令（明确分隔）；工具最小权限；危险操作（删数据、转账、发邮件）必须人工确认；输入输出过滤；敏感信息不放进提示词。</li>
+<li><b>可观测性</b>：记录每次请求的完整链路——提示词、工具调用、参数、结果、耗时、token 数。常用 <b>LangSmith</b>（LangChain 官方）、<b>Langfuse</b>（开源、可自部署）。出问题能回放定位。</li>
+</ul>
+<h3 id="eng-answer">面试怎么答</h3>
+<div class="answer"><b>问：Agent 上线后你会关注哪些问题？</b><br>
+主要四方面。一是质量：建立评估集，既评最终结果也评工具调用过程，改动后回归测试。二是幻觉：用 RAG 提供依据并要求引用，资料不足时拒答。三是成本和延迟：控制调用次数和上下文长度，按难度路由大小模型，做缓存和流式输出。四是安全：防提示注入，工具最小权限，高风险操作加人工确认。另外接入 Langfuse 或 LangSmith 做全链路追踪，记录每一步的输入输出、耗时和 token，方便定位问题和优化。</div>
+<h3 id="eng-faq">常见追问</h3>
+<details><summary>怎么做流式输出？</summary><p>调用模型时 <code>stream=True</code>，逐块拿到 token；后端用 FastAPI 的 <code>StreamingResponse</code> 以 SSE（<code>text/event-stream</code>）推给前端；前端用 <code>fetch</code> 读流或 <code>EventSource</code> 逐字渲染。工具调用的参数在流式里是分片到达的，要拼完整再解析。</p></details>
+<details><summary>Human-in-the-loop 是什么？</summary><p>在关键节点暂停，等人确认或修改后再继续，例如执行付款、发邮件前。LangGraph 支持中断（interrupt）和从检查点恢复。</p></details>
+</section>
+
+<!-- ============ 9 ============ -->
+<section class="topic" id="framework">
+<h2>9. 框架与协议：LangChain / LangGraph / MCP</h2>
+<h3 id="framework-core">核心概念</h3>
+<ul>
+<li><b>LangChain</b>：提供模型、提示词模板、工具、检索器等组件的统一封装，快速搭建应用。</li>
+<li><b>LangGraph</b>：把 Agent 建模成<b>状态图</b>：<b>State</b>（共享状态）、<b>Node</b>（一个步骤，如调模型、执行工具）、<b>Edge</b>（流转，<b>条件边</b>根据状态决定下一步，比如"有 tool_calls 就去工具节点，没有就结束"）。支持循环、检查点持久化（记忆、断点恢复）、人工中断、多 Agent。我们手写的 for 循环，就是一个"模型节点 ⇄ 工具节点"的两节点图。JD 里点名 LangGraph 的有 22/24 份。</li>
+<li>其他：LlamaIndex（偏 RAG 数据处理）、CrewAI、AutoGen（多 Agent）、Dify / Coze（低代码平台）。</li>
+<li><b>MCP（Model Context Protocol）</b>：Anthropic 2024 年提出的开放协议，统一"AI 应用如何连接外部工具和数据"。<b>MCP Server</b> 暴露工具（tools）、资源（resources）、提示模板（prompts）；<b>MCP Client</b>（在 Claude Desktop、Cursor 等宿主应用里）连接 Server，发现并调用它们。传输方式有 stdio（本地进程）和 HTTP（Streamable HTTP）。Python 可用官方 SDK 或 FastMCP 快速写 Server。</li>
+<li><b>Function Calling 和 MCP 的关系</b>：Function Calling 是模型的能力和 API 格式（模型怎么表达"调哪个工具"）；MCP 是工具的接入标准（工具怎么被发现、怎么被调用）。MCP 解决的是 M 个应用 × N 个工具要各写一遍集成的问题，写一次 Server，所有支持 MCP 的应用都能用。最终模型调用 MCP 工具时，底层仍然是 Function Calling。</li>
+</ul>
+<h3 id="framework-answer">面试怎么答</h3>
+<div class="answer"><b>问：为什么用 LangGraph？和自己写循环比有什么好处？</b><br>
+自己写循环能理解原理，但真实项目需要分支、循环、状态持久化、断点恢复、人工审批、多 Agent 协作和可视化调试，这些手写很容易乱。LangGraph 把流程建模成状态图，节点是步骤、边是流转规则，关键路径可以用代码固定，局部再交给模型决策，可控性比纯 ReAct 循环更好，还自带检查点做记忆和恢复。</div>
+<div class="answer"><b>问：MCP 是什么？解决什么问题？</b><br>
+MCP 是一个让 AI 应用以统一方式连接外部工具和数据的开放协议，采用客户端-服务器架构。工具提供方实现一次 MCP Server，暴露 tools、resources、prompts，任何支持 MCP 的客户端都能自动发现和调用，避免每个应用、每个工具都写一遍定制集成。它和 Function Calling 是互补的：MCP 管工具怎么接入，Function Calling 管模型怎么决定调用。</div>
+<h3 id="framework-faq">常见追问</h3>
+<details><summary>MCP 有什么安全风险？</summary><p>第三方 Server 可能返回恶意内容（提示注入），或工具描述被篡改诱导模型；权限过大可能误删数据。要只用可信 Server、最小权限、敏感操作人工确认。</p></details>
+</section>
+
+<!-- ============ 10 ============ -->
+<section class="topic" id="llm">
+<h2>10. 大模型底层路线</h2>
+<h3 id="llm-core">核心概念</h3>
+<p>从 fast.ai 学过的 <code>wx+b</code>、矩阵、softmax 出发，到大模型还差这几步：</p>
+<ol>
+<li><b>Tokenization 与 Embedding</b>：文字先切成 token（常用 BPE 等子词算法，一个汉字可能是 1 个或多个 token），每个 token 查表变成一个向量（embedding），再加上位置信息。和"像素变数字"是同一思路。</li>
+<li><b>Transformer 与注意力</b>：每个 token 的向量分别乘三个矩阵得到 Q（查询）、K（键）、V（值）。<code>Attention = softmax(Q·Kᵀ / √d) · V</code>：Q 和所有 K 做点积算"该关注谁"，softmax 变成权重，再对 V 加权求和。生成时用因果遮罩，只能看前面的 token。多头注意力 = 并行做多组。再叠加前馈网络（就是 wx+b + 激活函数）、残差和归一化，堆几十层。</li>
+<li><b>训练目标：预测下一个 token</b>。最后一层输出整个词表上的分数，softmax 得到概率，损失函数是<b>交叉熵</b>，和数字分类一样，只是"类别"变成了整个词表（几万到十几万个）。</li>
+<li><b>预训练 → SFT → RLHF</b>：预训练在海量文本上学语言和知识（只会"续写"）；SFT 指令微调用"指令-回答"数据教它听指令、对话、按格式调用工具（所以模型"会" Function Calling）；RLHF（或 DPO 等）用人类偏好让回答更有用、更安全；推理模型还会用强化学习训练长思考。</li>
+<li><b>推理参数</b>：
+  <ul><li><b>temperature</b>：除以温度后再 softmax，低→更确定，高→更随机多样；</li>
+  <li><b>top-p</b>：只在累计概率达到 p 的最小候选集合里采样；</li>
+  <li><b>KV Cache</b>：逐 token 生成时，缓存前面 token 的 K、V，不用每步重算，加速推理，但占显存；</li>
+  <li><b>上下文窗口</b>：一次能处理的最大 token 数（输入 + 输出），受注意力计算量（随长度平方增长）和显存限制。</li></ul></li>
+</ol>
+<div class="tip">推荐学习：Andrej Karpathy 的 <a href="https://karpathy.ai/zero-to-hero.html" target="_blank" rel="noopener">Neural Networks: Zero to Hero</a>，风格和 fast.ai 很像，从代码出发，最后用 PyTorch 从零手写一个小 GPT。建议主线做 Agent 项目，副线每周看一两集。</div>
+<h3 id="llm-answer">面试怎么答</h3>
+<div class="answer"><b>问：简单讲讲注意力机制。</b><br>
+注意力让每个 token 根据上下文动态决定关注哪些其他 token。具体是把每个 token 的向量投影成 Q、K、V 三个向量，用当前 token 的 Q 和所有 token 的 K 做点积，除以根号 d 防止数值过大，经过 softmax 得到注意力权重，再用权重对 V 加权求和，得到融合了上下文的新表示。多头注意力是并行做多组，让模型从不同角度关注信息。整个过程本质就是矩阵乘法加 softmax，可以高度并行。</div>
+<h3 id="llm-faq">常见追问</h3>
+<details><summary>为什么要除以 √d？</summary><p>维度 d 大时点积数值会很大，softmax 会变得非常尖锐（接近 one-hot），梯度变小、训练不稳定。除以 √d 让数值保持在合适范围。</p></details>
+<details><summary>temperature 设为 0 就一定输出相同吗？</summary><p>理论上接近贪心解码（每次选概率最高的），但由于 GPU 浮点计算、批处理等因素，实际服务中也不保证完全一致。</p></details>
+<details><summary>为什么模型会"幻觉"？</summary><p>它的训练目标是生成"看起来最可能的下一个 token"，而不是"真实的事实"；遇到不知道的内容也会生成流畅但错误的文字。</p></details>
+</section>
+<!-- ============ 11 ============ -->
+<section class="topic" id="code">
+<h2>11. 实战代码</h2>
+<p>三个脚本都用 OpenAI SDK 连 DeepSeek（<code>base_url="https://api.deepseek.com"</code>，模型 <code>deepseek-chat</code>），Key 从环境变量 <code>DEEPSEEK_API_KEY</code> 读取。<b>不要把 Key 写进代码再上传 GitHub。</b>源码也在仓库的 <a href="https://github.com/sivaschen/agent-notes/tree/main/code" target="_blank" rel="noopener">code/</a> 目录。</p>
+<h3 id="code-a">(a) 最小 Agent：get_question</h3>
+<p>一个工具、一次任务，模型一共被请求两次：第 1 次返回 tool_calls，第 2 次拿到题目后给出回答。</p>
+<pre><code># 第一版：最小 Agent，只有一个 get_question 工具
+# 运行前：在 PowerShell 里设置 $env:DEEPSEEK_API_KEY="你的key"（不要把 Key 写进代码）
+import json, os
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ["DEEPSEEK_API_KEY"],   # 方括号里是变量名，不是 Key 本身
+                base_url="https://api.deepseek.com")
+
+QUESTIONS = {
+    "工具调用": "请解释 Function Calling 的原理。",
+    "规划": "ReAct 和 Plan-and-Execute 有什么区别？",
+    "记忆": "Agent 的短期记忆和长期记忆分别怎么实现？",
+}
+
+def get_question(topic: str) -&gt; str:
+    return QUESTIONS.get(topic, "题库里没有这个主题")
+
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_question",
+        "description": "按主题从题库里取一道 Agent 面试题",
+        "parameters": {
+            "type": "object",
+            "properties": {"topic": {"type": "string", "enum": list(QUESTIONS)}},
+            "required": ["topic"],
+        },
+    },
+}]
+
+def run_agent(user_input: str) -&gt; str:
+    messages = [
+        {"role": "system", "content": "你是 Agent 面试官，需要时用工具取题。"},
+        {"role": "user", "content": user_input},
+    ]
+    for step in range(5):                      # 步数上限，防止死循环
+        resp = client.chat.completions.create(
+            model="deepseek-chat", messages=messages, tools=tools)
+        msg = resp.choices[0].message
+        messages.append(msg)                   # 先把 assistant 消息本身加进去
+        if not msg.tool_calls:                 # 没有工具调用 = 最终回答
+            return msg.content
+        for call in msg.tool_calls:
+            args = json.loads(call.function.arguments)   # arguments 是 JSON 字符串
+            print(f"[第{step + 1}步] 调用 {call.function.name}({args})")
+            result = get_question(**args)
+            messages.append({"role": "tool",
+                             "tool_call_id": call.id, "content": result})
+    return "超过最大步数"
+
+if __name__ == "__main__":
+    print(run_agent("给我出一道关于规划的面试题"))</code></pre>
+<h3 id="code-b">(b) 面试官：多工具 + 多轮对话</h3>
+<p>新东西：① <code>record_score</code> 工具（模型能打分但存不下来）；② <code>TOOL_FUNCS</code> 字典分发；③ 详细 system 提示词约束流程（低于 7 分追问，否则换题）；④ <code>messages</code> 移到函数外，跨轮累积 = 短期记忆。需要在自己的 PowerShell 里运行，因为要键盘作答。</p>
+<pre><code># 第二版：多工具 + 多轮对话的面试官（get_question + record_score）
+import json, os
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ["DEEPSEEK_API_KEY"],
+                base_url="https://api.deepseek.com")
+
+QUESTIONS = {
+    "工具调用": "请解释 Function Calling 的原理。",
+    "规划": "ReAct 和 Plan-and-Execute 有什么区别？",
+    "记忆": "Agent 的短期记忆和长期记忆分别怎么实现？",
+}
+scores = []  # 记录每次评分，相当于一个简单的"数据库"
+
+def get_question(topic: str) -&gt; str:
+    return QUESTIONS.get(topic, "题库里没有这个主题")
+
+def record_score(topic: str, score: int, missing: str) -&gt; str:
+    scores.append({"topic": topic, "score": score, "missing": missing})
+    avg = sum(s["score"] for s in scores) / len(scores)
+    return f"已记录。目前共答 {len(scores)} 题，平均分 {avg:.1f}"
+
+TOOL_FUNCS = {"get_question": get_question, "record_score": record_score}
+
+tools = [
+    {"type": "function", "function": {
+        "name": "get_question",
+        "description": "按主题从题库取一道面试题。开始面试或换题时使用。",
+        "parameters": {"type": "object",
+            "properties": {"topic": {"type": "string", "enum": list(QUESTIONS)}},
+            "required": ["topic"]}}},
+    {"type": "function", "function": {
+        "name": "record_score",
+        "description": "候选人回答问题后，给回答打分（1-10）并记录遗漏的要点。",
+        "parameters": {"type": "object",
+            "properties": {
+                "topic": {"type": "string", "enum": list(QUESTIONS)},
+                "score": {"type": "integer", "minimum": 1, "maximum": 10},
+                "missing": {"type": "string", "description": "回答中遗漏的关键点"}},
+            "required": ["topic", "score", "missing"]}}},
+]
+
+SYSTEM = """你是严格但友好的 AI Agent 面试官。流程：
+1. 用 get_question 取题并提问，一次只问一题。
+2. 候选人回答后，先调用 record_score 打分，再简要点评。
+3. 分数低于 7 分就针对遗漏点追问一次；否则换一个新主题。"""
+
+messages = [{"role": "system", "content": SYSTEM}]   # 放在函数外 = 跨轮次的短期记忆
+
+def agent_turn(user_input: str) -&gt; str:
+    messages.append({"role": "user", "content": user_input})
+    for step in range(5):
+        resp = client.chat.completions.create(
+            model="deepseek-chat", messages=messages, tools=tools)
+        msg = resp.choices[0].message
+        messages.append(msg)
+        if not msg.tool_calls:
+            return msg.content
+        for call in msg.tool_calls:
+            name = call.function.name
+            args = json.loads(call.function.arguments)
+            print(f"  [工具] {name}({args})")
+            result = TOOL_FUNCS[name](**args)   # 按名字分发到对应函数
+            messages.append({"role": "tool",
+                             "tool_call_id": call.id, "content": result})
+    return "超过最大步数"
+
+print("面试官：", agent_turn("我准备好了，开始面试吧"))
+while True:
+    answer = input("\n你：")
+    if answer in ("q", "退出"):
+        break
+    print("\n面试官：", agent_turn(answer))</code></pre>
+<h3 id="code-c">(c) rag.py：TF-IDF 版 Agentic RAG</h3>
+<p>资料是同目录的 <a href="agent_jd_summary.md">agent_jd_summary.md</a>。按行切块（&gt;10 字），<code>TfidfVectorizer(analyzer="char", ngram_range=(1, 2))</code> 按单字和双字建向量（中文不需要分词库），余弦相似度取 top 5，包装成 <code>search_jd</code> 工具。<code>argsort()</code> 从小到大排下标，<code>[::-1]</code> 反转，<code>[:top_k]</code> 取前几个。</p>
+<pre><code># 第三版：最小 RAG（TF-IDF 版），把 JD 资料做成 search_jd 工具交给 Agent
+# 依赖：python -m pip install openai scikit-learn
+import json, os
+from openai import OpenAI
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+client = OpenAI(api_key=os.environ["DEEPSEEK_API_KEY"],
+                base_url="https://api.deepseek.com")
+
+# ---------- 第 1 步：切块 ----------
+with open("agent_jd_summary.md", encoding="utf-8") as f:
+    text = f.read()
+chunks = [c.strip() for c in text.split("\n") if len(c.strip()) &gt; 10]
+print(f"资料切成了 {len(chunks)} 块")
+
+# ---------- 第 2 步：向量化 ----------
+# 按单字和双字切词，中文不需要额外分词库
+vectorizer = TfidfVectorizer(analyzer="char", ngram_range=(1, 2))
+chunk_vectors = vectorizer.fit_transform(chunks)
+
+# ---------- 第 3 步：检索 ----------
+def search_jd(query: str, top_k: int = 5) -&gt; str:
+    query_vector = vectorizer.transform([query])
+    scores = cosine_similarity(query_vector, chunk_vectors)[0]
+    best = scores.argsort()[::-1][:top_k]          # 相似度最高的 k 块
+    return "\n".join(chunks[i] for i in best)
+
+# ---------- 第 4 步：把检索做成工具，交给 Agent ----------
+tools = [{"type": "function", "function": {
+    "name": "search_jd",
+    "description": "从收集的 AI Agent 岗位 JD 资料中检索相关内容。"
+                   "回答关于招聘要求、技能、岗位的问题时必须使用。",
+    "parameters": {"type": "object",
+        "properties": {"query": {"type": "string",
+                                 "description": "检索关键词或问题"}},
+        "required": ["query"]}}}]
+
+messages = [{"role": "system", "content":
+    "你是求职顾问。回答前先用 search_jd 检索资料，只根据检索结果回答，"
+    "资料里没有的就说不知道，不要编造。"}]
+
+def agent_turn(user_input: str) -&gt; str:
+    messages.append({"role": "user", "content": user_input})
+    for step in range(5):
+        resp = client.chat.completions.create(
+            model="deepseek-chat", messages=messages, tools=tools)
+        msg = resp.choices[0].message
+        messages.append(msg)
+        if not msg.tool_calls:
+            return msg.content
+        for call in msg.tool_calls:
+            args = json.loads(call.function.arguments)
+            result = search_jd(**args)
+            print(f"  [检索] {args['query']}\n  [命中]\n{result}\n")
+            messages.append({"role": "tool",
+                             "tool_call_id": call.id, "content": result})
+    return "超过最大步数"
+
+while True:
+    q = input("\n你：")
+    if q in ("q", "退出"):
+        break
+    print("\n顾问：", agent_turn(q))</code></pre>
+<h3 id="code-faq">常见追问</h3>
+<details><summary>TF-IDF 版和真正的 RAG 差在哪？</summary><p>流程完全一样，差别只在向量化：TF-IDF 只比字面重合，本质更像关键词检索；换成 embedding 模型（如 bge）就是语义检索，再把 numpy 计算换成向量数据库即可。</p></details>
+<details><summary>下一步怎么升级这个项目？</summary><p>换语义 embedding + 混合检索；加查询改写；用 LangGraph 重写循环做对比；用 FastAPI 包成接口并支持 SSE 流式；分数存 SQLite → PostgreSQL；Docker 部署上线。</p></details>
+</section>
+
+<!-- ============ 12 ============ -->
+<section class="topic" id="jd">
+<h2>12. JD 技能分析</h2>
+<p>2026-10-16 通过公开搜索收集 <b>24 份</b>真实 JD（国内 19、海外 5；Boss直聘、拉勾需登录，未收录）。频次依据搜索摘要统计，只会偏低。完整表格见 <a href="agent_jd_summary.md">agent_jd_summary.md</a>。</p>
+<table>
+<tr><th>分组</th><th>技能</th><th>JD 数 / 24</th></tr>
+<tr><td rowspan="5">必备</td><td>LangChain / LangGraph 等 Agent 框架（LangGraph 单独点名 22 份）</td><td>24</td></tr>
+<tr><td>RAG</td><td>24</td></tr>
+<tr><td>Python</td><td>20</td></tr>
+<tr><td>Function / Tool Calling</td><td>18</td></tr>
+<tr><td>向量数据库 / Embedding</td><td>17</td></tr>
+<tr><td rowspan="8">常见</td><td>Prompt 工程</td><td>15</td></tr>
+<tr><td>评估 / 可观测（LangSmith、Langfuse、Eval）</td><td>14</td></tr>
+<tr><td>FastAPI</td><td>13</td></tr>
+<tr><td>Docker / K8s</td><td>12</td></tr>
+<tr><td>SQL / PostgreSQL / Redis</td><td>11</td></tr>
+<tr><td>记忆 / 上下文管理</td><td>约 11</td></tr>
+<tr><td>MCP</td><td>10</td></tr>
+<tr><td>多 Agent 协作</td><td>10</td></tr>
+<tr><td rowspan="5">加分</td><td>微调 SFT / LoRA</td><td>9</td></tr>
+<tr><td>Dify / Coze 低代码平台</td><td>9</td></tr>
+<tr><td>前端框架 React / Vue / Next（全栈岗基本必备）</td><td>8</td></tr>
+<tr><td>流式输出 SSE / WebSocket</td><td>5</td></tr>
+<tr><td>Java / Spring Boot</td><td>4</td></tr>
+</table>
+<h3 id="jd-plan">学习优先级</h3>
+<ol>
+<li><b>Agent 核心</b>：Function Calling、Agent 循环、提示词（已完成） → <b>RAG</b>（进行中） → 用 <b>LangGraph</b> 重写手写循环做对比。</li>
+<li><b>后端</b>：FastAPI、PostgreSQL（+ pgvector）、Redis、Docker，对上"多学后端"的目标。</li>
+<li><b>工程化</b>：评估与可观测（Langfuse / LangSmith）、MCP Server 开发、多 Agent。</li>
+<li><b>发挥前端优势</b>：全栈岗看重流式对话界面，面试网站要做 SSE 流式输出并展示工具调用过程。</li>
+<li><b>一定要有上线的真实项目</b>，能讲清遇到的问题（模型乱调工具、上下文太长、回答太慢）和解决办法。</li>
+<li>加分项（微调、Dify）有余力再看。</li>
+</ol>
+</section>
+
+<!-- ============ 13 ============ -->
+<section class="topic" id="env">
+<h2>13. 环境踩坑记录（Windows）</h2>
+<table>
+<tr><th>问题</th><th>原因 / 解决</th></tr>
+<tr><td><code>export</code> 不能用</td><td>那是 Mac/Linux 写法。PowerShell 用 <code>$env:DEEPSEEK_API_KEY="sk-xxx"</code>（要加引号，只对当前窗口有效）；永久保存用 <code>setx DEEPSEEK_API_KEY "sk-xxx"</code>，然后<b>重开</b> PowerShell 才生效。</td></tr>
+<tr><td><code>KeyError</code>，报错里出现了 Key</td><td><code>os.environ["NAME"]</code> 方括号里是<b>变量名</b>，不是 Key 本身。写成 <code>os.environ["DEEPSEEK_API_KEY"]</code>。Key 一旦在报错/日志里泄露，去平台删掉重新生成。</td></tr>
+<tr><td>别的窗口/程序读不到 <code>$env:</code> 设置的变量</td><td><code>$env:</code> 只作用于当前进程，换窗口要用 <code>setx</code> 或重新设置。</td></tr>
+<tr><td><code>Could not find a version ... (from versions: none)</code></td><td>pip 没连上源。换国内镜像并信任主机：<br><code>pip install 包名 -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com</code><br>或清华 <code>-i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn</code>。加 <code>-v</code> 看详细过程；也检查 VPN / 代理设置。默认镜像：<code>pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/</code></td></tr>
+<tr><td><code>No module named 'sklearn'</code></td><td>包名是 <code>scikit-learn</code>，导入名是 <code>sklearn</code>，两者不同。装 <code>scikit-learn</code>。</td></tr>
+<tr><td>装了还是找不到 / <code>No module named pip</code></td><td>pip 和 python 不是同一个解释器。用 <code>python -m pip install ...</code> 保证装进当前 python；没有 pip 时 <code>python -m ensurepip --upgrade</code>。<code>where.exe python</code> 查看电脑上有几个 Python（曾经误用了别的软件自带的 Python）。</td></tr>
+<tr><td>项目依赖互相干扰</td><td>每个项目建自己的<b>虚拟环境</b>：<br><code>D:\software\python\python.exe -m venv .venv</code>（只需一次）<br><code>.\.venv\Scripts\Activate.ps1</code>（每次新开窗口都要激活，前面出现 <code>(.venv)</code>）<br><code>python -m pip install openai scikit-learn -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com</code><br>可用 <code>pip freeze &gt; requirements.txt</code> 记录依赖。</td></tr>
+<tr><td>激活时"禁止运行脚本"</td><td>执行一次 <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>。</td></tr>
+<tr><td>中文输出乱码</td><td>多是读取输出的编码问题（如被其他程序以 GBK 读取）。自己的 PowerShell 一般正常；可设 <code>$env:PYTHONIOENCODING="utf-8"</code>。</td></tr>
+</table>
+<div class="tip">上传 GitHub 前：确认代码里没有 Key，把 <code>.venv/</code> 加进 <code>.gitignore</code>。</div>
+</section>
+
+<div id="noResult">没有找到匹配的内容，换个关键词试试。</div>
+<footer>AI Agent 面试复习笔记 · 持续更新 · 纯静态页面，无外部依赖</footer>
+</main>
+</div>
+<button class="icon" id="toTop" aria-label="回到顶部">↑</button>
+<script src="app.js"></script>
+</body>
+</html>

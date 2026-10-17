@@ -1,0 +1,49 @@
+:root{--bg:#fbfbfd;--fg:#1f2328;--muted:#656d76;--card:#ffffff;--border:#d8dee4;--accent:#2563eb;--accent-bg:#eff4ff;--code-bg:#f3f4f6;--answer-bg:#f0fdf4;--answer-bd:#16a34a;--warn-bg:#fff7ed;--warn-bd:#ea580c;--side-w:270px}
+[data-theme="dark"]{--bg:#0f1115;--fg:#e6e6e6;--muted:#9aa4b2;--card:#171a21;--border:#2b313c;--accent:#60a5fa;--accent-bg:#1b2638;--code-bg:#1e222b;--answer-bg:#132219;--answer-bd:#22c55e;--warn-bg:#2a1c10;--warn-bd:#f97316}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--fg:#e6e6e6;--muted:#9aa4b2;--card:#171a21;--border:#2b313c;--accent:#60a5fa;--accent-bg:#1b2638;--code-bg:#1e222b;--answer-bg:#132219;--answer-bd:#22c55e;--warn-bg:#2a1c10;--warn-bd:#f97316}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+header.top{position:sticky;top:0;z-index:20;display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+header.top h1{font-size:17px;margin:0;white-space:nowrap}
+#search{flex:1;max-width:420px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px}
+button.icon{border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:15px}
+#menuBtn{display:none}
+.layout{display:flex}
+nav.side{position:sticky;top:53px;height:calc(100vh - 53px);width:var(--side-w);flex-shrink:0;overflow-y:auto;padding:14px 10px 40px;border-right:1px solid var(--border);background:var(--card)}
+nav.side a{display:block;padding:4px 10px;border-radius:6px;color:var(--fg);font-size:14.5px}
+nav.side a.sub{padding-left:24px;color:var(--muted);font-size:13.5px}
+nav.side a:hover,nav.side a.active{background:var(--accent-bg);color:var(--accent);text-decoration:none}
+main{flex:1;min-width:0;max-width:920px;margin:0 auto;padding:20px 22px 80px}
+section.topic{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:6px 22px 18px;margin:0 0 24px}
+section.topic.hidden{display:none}
+h2{font-size:23px;margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--accent-bg)}
+h3{font-size:18px;margin:22px 0 6px;color:var(--accent)}
+h4{font-size:16px;margin:16px 0 4px}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;font-size:.9em;background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;overflow-x:auto;line-height:1.55;font-size:13.5px}
+pre code{background:none;padding:0;font-size:inherit}
+.answer{background:var(--answer-bg);border-left:4px solid var(--answer-bd);border-radius:6px;padding:10px 14px;margin:8px 0}
+.tip{background:var(--warn-bg);border-left:4px solid var(--warn-bd);border-radius:6px;padding:10px 14px;margin:10px 0}
+details{border:1px solid var(--border);border-radius:8px;padding:6px 12px;margin:8px 0;background:var(--bg)}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:6px}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--border);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:var(--accent-bg)}
+mark{background:#fde047;color:#111;border-radius:2px}
+.intro{color:var(--muted)}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);margin-right:4px}
+#noResult{display:none;color:var(--muted);text-align:center;padding:40px}
+footer{color:var(--muted);font-size:13px;text-align:center;padding:20px}
+#toTop{position:fixed;right:18px;bottom:18px;z-index:30}
+@media (max-width:860px){
+  #menuBtn{display:inline-block}
+  nav.side{position:fixed;left:0;top:53px;z-index:25;transform:translateX(-100%);transition:transform .2s;box-shadow:2px 0 12px rgba(0,0,0,.2)}
+  nav.side.open{transform:none}
+  main{padding:14px 10px 80px}
+  section.topic{padding:4px 14px 14px}
+  header.top h1{font-size:15px}
+}
+@media print{nav.side,header.top,#toTop{display:none}section.topic{border:none}}
