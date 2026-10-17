@@ -7,7 +7,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 header.top{position:sticky;top:0;z-index:20;display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border)}
 header.top h1{font-size:17px;margin:0;white-space:nowrap}
-#search{flex:1;max-width:420px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px}
+#search{flex:1;min-width:0;width:100%;max-width:420px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px}
 button.icon{border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:15px}
 #menuBtn{display:none}
 .layout{display:flex}
@@ -45,5 +45,6 @@ footer{color:var(--muted);font-size:13px;text-align:center;padding:20px}
   main{padding:14px 10px 80px}
   section.topic{padding:4px 14px 14px}
   header.top h1{font-size:15px}
+  header.top{padding:8px 10px;gap:6px}
 }
 @media print{nav.side,header.top,#toTop{display:none}section.topic{border:none}}
