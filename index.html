@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AI Agent 面试复习笔记</title>
 <meta name="description" content="AI Agent 开发面试复习笔记：Function Calling、RAG、记忆、规划、多 Agent、大模型原理、实战代码与 JD 分析">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%232563eb%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2216%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Arial%22%3EA%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 <script>(function(){var t=localStorage.getItem('agent-notes-theme');if(t)document.documentElement.setAttribute('data-theme',t)})()</script>
 </head>
 <body>
+<body>
+<svg class="svgdefs" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ahp"/></marker>
+<marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ahp g"/></marker>
+</defs></svg>
 <header class="top">
   <button class="icon" id="menuBtn" aria-label="目录">☰</button>
   <h1>AI Agent 面试笔记</h1>
@@ -18,7 +24,18 @@
 <div class="layout">
 <nav class="side"><div id="toc"></div></nav>
 <main>
-<p class="intro">给自己的复习笔记：从前端转全栈，用 Python + DeepSeek 学 Agent 开发。每章分三块：<span class="pill">核心概念</span><span class="pill">面试怎么答</span><span class="pill">常见追问</span>。点开追问前先自己说一遍答案。</p>
+<div class="hero">
+<h2 class="hero-title">AI Agent 面试复习笔记</h2>
+<p>从前端转全栈，用 Python + DeepSeek 学 Agent 开发。每章：<span class="pill">核心概念</span><span class="pill">图解 / 交互演示</span><span class="pill">面试卡片</span><span class="pill">小测验</span>。先自己说答案，再翻卡片。</p>
+<div class="hero-stats" id="heroStats"></div>
+<div class="hero-links"><a class="btn primary" href="#loopDemo">▶ Agent 循环演示</a><a class="btn" href="#ragDemo">🔎 RAG 在线检索</a><a class="btn" href="#dashboard">📊 学习进度</a></div>
+</div>
+<section id="dashboard" class="dash">
+<div class="dash-head"><h2>📊 学习进度</h2>
+<div class="dash-actions"><button class="btn sm" id="expandAll">全部展开</button><button class="btn sm" id="collapseAll">全部折叠</button><button class="btn sm danger" id="resetProgress">清空进度</button></div></div>
+<div class="dash-top"><div id="dashRing"></div><div class="dash-legend"><p>掌握度 = 卡片「会」的比例 × 50% + 小测验最高分比例 × 50%。</p><p class="muted">进度保存在本浏览器（localStorage），换设备不同步。点击某一章可跳转。</p></div></div>
+<div id="dashBody" class="dash-grid"></div>
+</section>
 
 <!-- ============ 1 ============ -->
 <section class="topic" id="basics">
@@ -34,13 +51,30 @@
 <tr><td>理解用户意图<br>判断要不要用工具、用哪个<br>按 Schema 生成参数<br>根据工具结果组织最终回答</td><td>提供工具说明书（JSON Schema）<br>维护 <code>messages</code>（短期记忆）<br>解析参数、真正执行工具<br>把结果以 <code>role: "tool"</code> 回传<br>控制循环、步数上限、异常处理</td></tr>
 </table>
 <p>LangChain、LangGraph 这些框架，本质上就是把右边这一列封装好了。</p>
-<h3 id="basics-answer">面试怎么答</h3>
+<figure class="fig">
+<svg class="diagram" viewBox="0 0 520 230" role="img" aria-label="思考 行动 观察 循环">
+<rect class="nd main" x="190" y="92" width="140" height="46" rx="23"/><text class="lbl b" x="260" y="112">Agent 循环</text><text class="lbl s" x="260" y="128">直到无需再调工具</text>
+<rect class="nd" x="200" y="8" width="120" height="48" rx="10"/><text class="lbl b" x="260" y="30">① 思考</text><text class="lbl s" x="260" y="47">模型：下一步做什么</text>
+<rect class="nd alt" x="380" y="150" width="130" height="48" rx="10"/><text class="lbl b" x="445" y="172">② 行动</text><text class="lbl s" x="445" y="189">程序执行工具</text>
+<rect class="nd" x="10" y="150" width="130" height="48" rx="10"/><text class="lbl b" x="75" y="172">③ 观察</text><text class="lbl s" x="75" y="189">结果回传给模型</text>
+<path class="ar flow" d="M320 40 Q420 60 440 148"/>
+<path class="ar flow" d="M378 186 Q260 226 142 186"/>
+<path class="ar flow" d="M80 148 Q100 60 198 40"/>
+<path class="ar back" d="M330 115 L430 115"/><text class="lbl s" x="452" y="108">完成</text><text class="lbl s" x="452" y="124">→ 回答</text>
+</svg>
+<figcaption>思考由模型完成，行动和观察由程序完成：模型只输出"要调用什么"，执行永远在模型外面。</figcaption>
+</figure>
+<h3 id="basics-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="basics">
 <div class="answer"><b>问：什么是 AI Agent？和普通的大模型调用有什么区别？</b><br>
 Agent 是以大模型为"大脑"、能自主调用工具完成多步任务的系统。普通调用是一次输入一次输出；Agent 会在一个循环里反复思考、调用工具、观察结果，直到完成目标。关键在于分工：模型只负责理解和决策，输出要调用的工具和参数；执行工具、保存记忆、控制流程都是程序在做。所以 Agent 的能力上限取决于模型的推理能力，而稳定性很大程度上取决于工程实现。</div>
-<h3 id="basics-faq">常见追问</h3>
 <details><summary>模型真的会"执行"工具吗？</summary><p>不会。模型只生成"我要调用 X，参数是 Y"这段文字，程序解析后执行，再把结果作为新消息发回去。这也是为什么工具的安全边界要由代码来管。</p></details>
 <details><summary>Agent 和 Workflow（工作流）有什么区别？</summary><p>Workflow 的步骤是代码预先写死的，可控、可预测；Agent 的下一步由模型动态决定，灵活但不稳定。实际项目常常混用：主干流程用工作流固定，局部需要灵活判断的地方交给 Agent。能用简单工作流解决的，不要硬上 Agent。</p></details>
 <details><summary>什么时候不该用 Agent？</summary><p>任务步骤固定、对准确率和延迟要求很高、或者成本敏感时。Agent 多轮调用模型，慢、贵、而且结果有随机性。</p></details>
+</div>
+<h3 id="basics-quiz">小测验</h3>
+<div class="quiz" data-ch="basics"></div>
 </section>
 
 <!-- ============ 2 ============ -->
@@ -71,6 +105,8 @@ Agent 是以大模型为"大脑"、能自主调用工具完成多步任务的系
 <li>再次请求模型，循环，直到返回里<b>没有 <code>tool_calls</code></b>，此时的 <code>content</code> 就是最终回答。</li>
 <li>用 <code>for step in range(5)</code> 之类的<b>步数上限</b>防止死循环。</li>
 </ol>
+<h4 id="loop-demo-title">动手看一遍：逐步展开 messages</h4>
+<div class="widget" id="loopDemo"><noscript>需要开启 JavaScript 才能运行演示。</noscript></div>
 <h4>返回的 msg 长什么样</h4>
 <pre><code>ChatCompletionMessage(          # openai 库把返回的 JSON 包装成对象，所以能用 msg.content
     role="assistant",
@@ -96,15 +132,19 @@ result = TOOL_FUNCS[name](**args)   # 按模型给的名字找函数；**args �
 <li><b>需要可控一致</b>：要保证质量、去重、难度可控的内容。</li>
 </ul>
 <p>判断标准：<b>模型靠自己的知识能做好的，就让它直接答；需要外部数据或真实动作的，才做成工具。</b></p>
-<h3 id="fc-answer">面试怎么答</h3>
+<h3 id="fc-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="fc">
 <div class="answer"><b>问：讲一下 Function Calling 的原理。</b><br>
 Function Calling 是让模型以结构化格式表达"要调用哪个函数、传什么参数"的能力，是模型在训练阶段专门学过的。流程是：程序把 system、用户消息和用 JSON Schema 描述的工具列表一起发给模型；模型如果判断需要工具，就返回 tool_calls，里面有工具名和 JSON 字符串形式的参数；程序把这条 assistant 消息加入对话，解析参数并执行真实函数，把结果作为 role 为 tool 的消息、带上对应的 tool_call_id 回传；然后再请求模型，循环直到模型不再调用工具、给出最终回答。为防止死循环会设置最大步数。整个过程模型只负责决策，执行都在程序里。</div>
-<h3 id="fc-faq">常见追问</h3>
 <details><summary>模型输出的参数不合法（JSON 解析失败、缺字段、值越界）怎么办？</summary><p>arguments 本质是模型生成的文本，可能出错。① 用 Pydantic / JSON Schema 校验；② 校验失败时把错误信息作为 tool 结果回传给模型，让它<b>重试</b>（设重试上限）；③ 用 strict 模式 / 结构化输出 / <b>约束解码</b>（生成时只允许符合 Schema 的 token），从源头保证格式；④ 用 enum、明确的 description 降低出错率。</p></details>
 <details><summary>工具很多（几十上百个）时怎么办？</summary><p>全部塞进请求会占大量上下文、增加成本，模型也更容易选错。做法：先<b>检索工具</b>（把工具描述向量化，按用户问题召回最相关的几个再交给模型），或按场景分组/路由，或拆给多个子 Agent，每个只管一组工具。</p></details>
 <details><summary>模型一次返回多个 tool_calls 怎么处理？</summary><p>这叫并行工具调用。逐个（或并发）执行，每个结果都单独回传一条 tool 消息，各自带上对应的 tool_call_id。</p></details>
 <details><summary>工具执行报错了怎么办？</summary><p>捕获异常，把错误信息作为工具结果返回给模型，让模型决定换参数重试或换方案；同时设置超时和重试上限，避免卡死。</p></details>
 <details><summary>为什么要把 assistant 那条带 tool_calls 的消息也加入 messages？</summary><p>接口要求每条 tool 消息前面必须有对应的 assistant tool_calls 消息，模型才知道这个结果是回应哪次调用的。漏掉会报错。</p></details>
+</div>
+<h3 id="fc-quiz">小测验</h3>
+<div class="quiz" data-ch="fc"></div>
 </section>
 
 <!-- ============ 3 ============ -->
@@ -117,12 +157,16 @@ Function Calling 是让模型以结构化格式表达"要调用哪个函数、�
 <li><b>提示词控制：灵活但不可靠</b>（模型偶尔不按流程走）；<b>代码控制：可靠但不灵活</b>。关键步骤（必须打分、必须鉴权、扣款）要用代码强制，例如用户回答后由代码直接调用评分，或用 LangGraph 固定节点顺序。</li>
 <li>好提示词的要素：角色、任务、步骤、约束（不要做什么）、输出格式、示例（few-shot）。</li>
 </ul>
-<h3 id="prompt-answer">面试怎么答</h3>
+<h3 id="prompt-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="prompt">
 <div class="answer"><b>问：你怎么保证 Agent 按预期流程执行？</b><br>
 分两层。一层是提示词：在 system 里写清楚角色、步骤、约束和输出格式，必要时给示例，这能覆盖大部分情况。但提示词只是"建议"，模型有概率不遵守，所以对必须保证的关键步骤，我会把它放到代码里控制，比如用状态机或 LangGraph 固定节点顺序，用结构化输出加校验保证格式。原则是：灵活判断交给模型，硬性规则交给代码。</div>
-<h3 id="prompt-faq">常见追问</h3>
 <details><summary>什么是 Context Engineering（上下文工程）？</summary><p>比提示词工程更宽：不只是写好一句提示，而是设计每次请求里放什么——system 规则、检索到的资料、记忆、工具列表、历史摘要——以及放多少、怎么排序，让模型在有限的上下文里拿到最需要的信息。</p></details>
 <details><summary>怎么让模型输出稳定的 JSON？</summary><p>用模型的 JSON mode / 结构化输出 / Function Calling；在提示词里给出格式示例；降低 temperature；程序端用 Pydantic 校验，失败则带着错误重试。</p></details>
+</div>
+<h3 id="prompt-quiz">小测验</h3>
+<div class="quiz" data-ch="prompt"></div>
 </section>
 
 <!-- ============ 4 ============ -->
@@ -136,13 +180,41 @@ Function Calling 是让模型以结构化格式表达"要调用哪个函数、�
 <tr><td><b>Plan-and-Execute</b></td><td>先让模型列完整计划，再逐步执行（执行可用更小的模型），必要时重新规划</td><td>全局清晰，步骤可控、省成本</td><td>计划一开始错了不易发现，适应性弱于 ReAct</td></tr>
 <tr><td><b>Reflection / Reflexion</b></td><td>完成后让模型（或另一个模型）检查结果、指出问题再改；Reflexion 还把失败经验写成文字记忆用于下次尝试</td><td>提升质量，能自我纠错</td><td>多轮调用，成本和延迟增加</td></tr>
 </table>
+<figure class="fig">
+<svg class="diagram" viewBox="0 0 720 270" role="img" aria-label="ReAct 与 Plan-and-Execute 对比图">
+<text class="lbl b big" x="170" y="22">ReAct：边想边做</text>
+<text class="lbl b big" x="540" y="22">Plan-and-Execute：先规划再执行</text>
+<line class="sep" x1="360" y1="10" x2="360" y2="260"/>
+<rect class="nd" x="110" y="42" width="120" height="44" rx="10"/><text class="lbl b" x="170" y="62">Thought 思考</text><text class="lbl s" x="170" y="78">每步都调模型</text>
+<rect class="nd alt" x="220" y="150" width="120" height="44" rx="10"/><text class="lbl b" x="280" y="170">Action 行动</text><text class="lbl s" x="280" y="186">调用工具</text>
+<rect class="nd" x="10" y="150" width="130" height="44" rx="10"/><text class="lbl b" x="75" y="170">Observation</text><text class="lbl s" x="75" y="186">观察工具结果</text>
+<path class="ar flow" d="M230 70 Q275 95 282 148"/><path class="ar flow" d="M218 178 L142 178"/><path class="ar flow" d="M70 148 Q70 80 108 68"/>
+<text class="lbl s" x="130" y="128">循环 N 次</text>
+<rect class="nd io" x="110" y="222" width="120" height="34" rx="17"/><text class="lbl" x="170" y="244">最终回答</text>
+<path class="ar back" d="M170 86 Q150 160 170 220"/>
+<rect class="nd main" x="380" y="44" width="110" height="44" rx="10"/><text class="lbl b" x="435" y="64">规划器</text><text class="lbl s" x="435" y="80">大模型列计划</text>
+<rect class="nd state" x="520" y="38" width="190" height="96" rx="8"/>
+<text class="lbl mono left" x="534" y="62">1. 搜索相关 JD</text><text class="lbl mono left" x="534" y="84">2. 汇总技能频次</text><text class="lbl mono left" x="534" y="106">3. 写学习计划</text><text class="lbl mono left" x="534" y="126">…</text>
+<path class="ar flow" d="M490 66 L518 66"/>
+<rect class="nd alt" x="540" y="168" width="150" height="44" rx="10"/><text class="lbl b" x="615" y="188">执行器</text><text class="lbl s" x="615" y="204">逐步执行，可用小模型/ReAct</text>
+<path class="ar flow" d="M615 134 L615 166"/>
+<path class="ar back dashed" d="M540 196 Q440 200 430 90"/><text class="lbl s" x="468" y="226">出错 → 重新规划</text>
+<rect class="nd io" x="560" y="230" width="110" height="32" rx="16"/><text class="lbl" x="615" y="251">结果</text>
+<path class="ar flow" d="M615 212 L615 228"/>
+</svg>
+<figcaption>ReAct 每一步都根据观察调整，灵活但长任务易跑偏；Plan-and-Execute 先有全局计划，可控、省钱，靠"重新规划"弥补适应性。</figcaption>
+</figure>
 <p><b>怎么选与结合：</b>简单推理用 CoT；步骤不确定、要边查边做用 ReAct；任务长、步骤可预知用 Plan-and-Execute；对质量要求高再加 Reflection。常见组合：先规划，每个子步骤内部用 ReAct 执行，最后反思检查，失败则重新规划。我们写的那个"出题 → 评分 → 追问/换题"循环，就是一个简单的 ReAct。</p>
-<h3 id="plan-answer">面试怎么答</h3>
+<h3 id="plan-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="plan">
 <div class="answer"><b>问：ReAct 和 Plan-and-Execute 有什么区别？</b><br>
 ReAct 是推理和行动交替进行，每一步都根据上一步的观察结果决定下一步，适合步骤不确定、需要探索的任务，缺点是每步都要调用模型，长任务容易跑偏。Plan-and-Execute 先让模型制定完整计划，再按计划逐步执行，适合步骤较清晰的长任务，全局更可控、也能用小模型执行省成本，缺点是计划错了不容易纠正，所以通常会加"重新规划"环节。实际中常结合：先规划，子任务内部用 ReAct，最后再加反思校验。</div>
-<h3 id="plan-faq">常见追问</h3>
 <details><summary>Agent 陷入死循环 / 反复调用同一个工具怎么办？</summary><p>设最大步数和超时；检测重复调用（同工具同参数）并提示模型换方法；把已尝试过的内容写进上下文；必要时转人工（Human-in-the-loop）。</p></details>
 <details><summary>推理模型（如 DeepSeek-R1）和 CoT 是什么关系？</summary><p>推理模型通过强化学习训练，把"先长篇思考再回答"内化成了默认行为，相当于自带 CoT，不必再在提示词里要求"一步步想"。</p></details>
+</div>
+<h3 id="plan-quiz">小测验</h3>
+<div class="quiz" data-ch="plan"></div>
 </section>
 <!-- ============ 5 ============ -->
 <section class="topic" id="memory">
@@ -157,12 +229,42 @@ ReAct 是推理和行动交替进行，每一步都根据上一步的观察结�
 <li><b>长期记忆</b>：跨会话保存的信息（用户偏好、"上次 RAG 答得不好"、历史分数），存在外部存储（关系库、KV、向量库）。需要时检索出来塞进提示词。写入时机可以是每轮结束后让模型抽取"值得记住的事实"。</li>
 <li>常见分类：<b>语义记忆</b>（事实，如用户是前端工程师）、<b>情景记忆</b>（过往经历/对话）、<b>程序记忆</b>（怎么做事的规则，常体现在提示词里）。</li>
 </ul>
-<h3 id="memory-answer">面试怎么答</h3>
+<figure class="fig">
+<svg class="diagram" viewBox="0 0 720 280" role="img" aria-label="短期记忆与长期记忆示意图">
+<text class="lbl b big" x="180" y="22">短期记忆：messages 列表</text>
+<text class="lbl b big" x="545" y="22">长期记忆：外部存储</text>
+<line class="sep" x1="380" y1="10" x2="380" y2="270"/>
+<rect class="msg sys" x="40" y="38" width="220" height="24" rx="5"/><text class="lbl mono left" x="50" y="55">system（始终保留）</text>
+<rect class="msg old" x="40" y="68" width="220" height="22" rx="5"/><text class="lbl mono left faded" x="50" y="84">user 第1轮</text>
+<rect class="msg old" x="40" y="94" width="220" height="22" rx="5"/><text class="lbl mono left faded" x="50" y="110">assistant 第1轮</text>
+<rect class="msg sum" x="40" y="122" width="220" height="24" rx="5"/><text class="lbl mono left" x="50" y="139">摘要：早期对话的要点</text>
+<rect class="msg" x="40" y="152" width="220" height="22" rx="5"/><text class="lbl mono left" x="50" y="168">user 第5轮</text>
+<rect class="msg" x="40" y="178" width="220" height="22" rx="5"/><text class="lbl mono left" x="50" y="194">assistant (tool_calls)</text>
+<rect class="msg" x="40" y="204" width="220" height="22" rx="5"/><text class="lbl mono left" x="50" y="220">tool 结果</text>
+<rect class="msg" x="40" y="230" width="220" height="22" rx="5"/><text class="lbl mono left" x="50" y="246">user 第6轮（最新）</text>
+<path class="bracket" d="M270 152 h10 v100 h-10"/><text class="lbl s left" x="286" y="200">滑动窗口</text><text class="lbl s left" x="286" y="214">最近 N 轮</text>
+<path class="ar back" d="M268 92 Q300 110 266 132"/><text class="lbl s left" x="300" y="112">压缩</text>
+<text class="lbl s" x="150" y="272">越长：越贵、越慢、可能超出上下文窗口</text>
+<path class="db" d="M490 120 v90 a55 14 0 0 0 110 0 v-90"/><ellipse class="db" cx="545" cy="120" rx="55" ry="14"/>
+<text class="lbl b" x="545" y="162">数据库 / 向量库</text><text class="lbl s" x="545" y="182">偏好 · 事实 · 历史分数</text>
+<rect class="nd" x="420" y="44" width="120" height="40" rx="10"/><text class="lbl" x="480" y="68">本次对话</text>
+<rect class="nd main" x="566" y="44" width="148" height="40" rx="10"/><text class="lbl" x="640" y="68">下次对话的提示词</text>
+<path class="ar flow" d="M480 84 L510 108"/><text class="lbl s" x="452" y="104">抽取 → 写入</text>
+<path class="ar back" d="M580 108 L620 86"/><text class="lbl s" x="650" y="104">检索 → 注入</text>
+<text class="lbl s" x="545" y="250">读取长期记忆，本质就是一次 RAG</text>
+</svg>
+<figcaption>短期记忆就是每次都完整发送的消息列表，靠截断和摘要控制长度；长期记忆跨会话保存在外部，用时再检索出来。</figcaption>
+</figure>
+<h3 id="memory-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="memory">
 <div class="answer"><b>问：Agent 的短期记忆和长期记忆分别怎么实现？</b><br>
 短期记忆就是当前会话的消息列表，每次请求都完整发给模型。因为上下文窗口有限且按 token 计费，会用滑动窗口只保留最近几轮，或把早期内容总结成摘要。长期记忆是跨会话的，把用户偏好、关键事实、历史结果抽取出来存到数据库或向量库，下次对话时按相关性检索出来注入提示词。本质上长期记忆的读取就是一次 RAG。</div>
-<h3 id="memory-faq">常见追问</h3>
 <details><summary>记忆冲突或过期怎么办？</summary><p>给记忆加时间戳和来源，新信息覆盖旧信息；定期合并、去重；重要事实可以让用户确认。</p></details>
 <details><summary>上下文窗口为什么有限制？越长越好吗？</summary><p>注意力计算量随长度近似平方增长，KV Cache 显存也随长度线性增长；而且上下文越长，模型越容易忽略中间部分（lost in the middle）。所以不是越长越好，精挑细选的上下文效果更好也更便宜。</p></details>
+</div>
+<h3 id="memory-quiz">小测验</h3>
+<div class="quiz" data-ch="memory"></div>
 </section>
 
 <!-- ============ 6 ============ -->
@@ -178,6 +280,27 @@ ReAct 是推理和行动交替进行，每一步都根据上一步的观察结�
 <li><b>检索</b>：问题用<b>同一个</b>模型向量化，和每块算相似度，取 top_k。</li>
 <li><b>生成</b>：把检索结果和问题拼进提示词，要求"只根据资料回答，没有就说不知道"。</li>
 </ol>
+<figure class="fig">
+<svg class="diagram" viewBox="0 0 720 220" role="img" aria-label="RAG 离线建库与在线检索流程">
+<text class="lbl s left" x="6" y="18">离线：建库</text>
+<rect class="nd io" x="6" y="28" width="80" height="40" rx="8"/><text class="lbl" x="46" y="53">文档</text>
+<rect class="nd" x="110" y="28" width="90" height="40" rx="8"/><text class="lbl" x="155" y="53">解析</text>
+<rect class="nd" x="224" y="28" width="90" height="40" rx="8"/><text class="lbl" x="269" y="53">切块</text>
+<rect class="nd" x="338" y="28" width="100" height="40" rx="8"/><text class="lbl" x="388" y="53">向量化</text>
+<path class="db" d="M490 34 v40 a45 11 0 0 0 90 0 v-40"/><ellipse class="db" cx="535" cy="34" rx="45" ry="11"/><text class="lbl" x="535" y="68">向量库</text>
+<path class="ar flow" d="M86 48 L108 48"/><path class="ar flow" d="M200 48 L222 48"/><path class="ar flow" d="M314 48 L336 48"/><path class="ar flow" d="M438 48 L488 48"/>
+<text class="lbl s left" x="6" y="128">在线：问答（这部分都是<tspan class="em">程序</tspan>做的，直到最后一步才交给模型）</text>
+<rect class="nd io" x="6" y="140" width="80" height="40" rx="8"/><text class="lbl" x="46" y="165">问题</text>
+<rect class="nd" x="110" y="140" width="100" height="40" rx="8"/><text class="lbl" x="160" y="165">同一模型向量化</text>
+<rect class="nd" x="234" y="140" width="110" height="40" rx="8"/><text class="lbl" x="289" y="165">检索 top_k</text>
+<rect class="nd" x="368" y="140" width="110" height="40" rx="8"/><text class="lbl" x="423" y="165">拼进提示词</text>
+<rect class="nd main" x="502" y="140" width="90" height="40" rx="8"/><text class="lbl b" x="547" y="165">大模型</text>
+<rect class="nd io" x="616" y="140" width="98" height="40" rx="8"/><text class="lbl" x="665" y="165">带出处回答</text>
+<path class="ar flow" d="M86 160 L108 160"/><path class="ar flow" d="M210 160 L232 160"/><path class="ar flow" d="M344 160 L366 160"/><path class="ar flow" d="M478 160 L500 160"/><path class="ar flow" d="M592 160 L614 160"/>
+<path class="ar back" d="M520 88 Q400 110 300 138"/><text class="lbl s" x="430" y="106">相似度最高的几块</text>
+</svg>
+<figcaption>RAG = 切块 + 向量化 + 检索 + 带着资料生成。检索是程序做的，模型只负责基于资料作答。</figcaption>
+</figure>
 <h4>TF-IDF vs 语义 Embedding</h4>
 <table>
 <tr><th></th><th>TF-IDF / BM25（稀疏向量）</th><th>Embedding（稠密向量）</th></tr>
@@ -187,6 +310,8 @@ ReAct 是推理和行动交替进行，每一步都根据上一步的观察结�
 <tr><td>例子</td><td>sklearn TfidfVectorizer、BM25（TF-IDF 改进版，考虑文档长度和词频饱和）</td><td>中文常用 bge 系列、通义 text-embedding 等</td></tr>
 </table>
 <p><b>余弦相似度</b> = 两个向量的点积 ÷ 两者长度之积，即夹角余弦，越接近 1 越相似。本质还是矩阵运算。</p>
+<h4 id="rag-demo-title">在线试一试：浏览器里跑的 TF-IDF 检索</h4>
+<div class="widget" id="ragDemo"><noscript>需要开启 JavaScript 才能运行演示。</noscript></div>
 <h4>向量数据库与 ANN</h4>
 <p>块有几百万个时不能逐个比较（暴力搜索），要用<b>近似最近邻（ANN）</b>：牺牲一点准确率换极快速度。最常见的算法是 <b>HNSW</b>（分层可导航小世界图：多层图结构，从稀疏的上层快速定位，再到稠密的下层精确查找），还有 IVF（先聚类、只搜最近的几个簇）等。常用库：Chroma、Milvus、Qdrant、Pinecone、PostgreSQL 的 <b>pgvector</b>（JD 里出现很多）、FAISS。</p>
 <h4>检索优化（面试高频）</h4>
@@ -226,17 +351,21 @@ ReAct 是推理和行动交替进行，每一步都根据上一步的观察结�
 <tr><td><b>PyMuPDF</b></td><td>只处理 PDF，轻量、速度快。</td></tr>
 </table>
 <p>一句话：<b>纯文字、格式杂用 Tika；要保留表格和标题结构用 Docling / MinerU / Unstructured；只有 PDF 用 PyMuPDF。</b>资料质量直接决定 RAG 效果，这一步往往最费劲。</p>
-<h3 id="rag-answer">面试怎么答</h3>
+<h3 id="rag-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="rag">
 <div class="answer"><b>问：什么是 RAG？为什么需要它？</b><br>
 RAG 是检索增强生成。离线阶段把文档解析、切块、向量化后存进向量数据库；在线阶段程序把用户问题用同一个模型向量化，检索出最相关的几段，和问题一起放进提示词，让模型基于资料作答。它解决了模型不知道私有和最新知识的问题，避免把大量资料全塞进上下文，并且答案可以引用出处，减少幻觉。</div>
 <div class="answer"><b>问：RAG 检索不准怎么优化？</b><br>
 先看数据：文档解析是否干净、切块大小和重叠是否合适，可以用小块检索大块返回。再看检索：上混合检索（BM25 + 向量），加 Rerank 精排，用元数据过滤缩小范围，对问题做查询改写或 HyDE。最后看生成：控制块数、把最相关的放在前面、要求引用出处。整个过程要用评估集量化：检索看召回率，生成看忠实度和相关性，可以用 RAGAS 或 LLM 裁判。</div>
-<h3 id="rag-faq">常见追问</h3>
 <details><summary>切块大小怎么定？</summary><p>没有固定答案，取决于文档类型和问题粒度。常见起点 300~800 字（或 256~512 token）、重叠 10%~20%，再用评估集对比几组参数选最好的。结构清晰的文档优先按标题/段落切。</p></details>
 <details><summary>换了 Embedding 模型要做什么？</summary><p>整个库都要重新向量化。不同模型的向量空间不兼容，维度也可能不同，问题和文档必须用同一个模型。</p></details>
 <details><summary>检索到的资料和问题无关，模型还硬答怎么办？</summary><p>设相似度阈值，低于阈值视为没找到；提示词要求"资料不足就说不知道"；评估忠实度；必要时让 Agent 改写问题再查一次。</p></details>
 <details><summary>多轮对话里 RAG 怎么做？</summary><p>先用模型结合历史把当前问题改写成独立完整的问题（如"那它的缺点呢？"→"HNSW 的缺点是什么？"），再去检索。</p></details>
 <details><summary>Rerank 为什么比向量检索准？</summary><p>向量检索是问题和文档分别编码再比较（bi-encoder），信息交互少但快；Rerank 是把问题和文档拼在一起输入模型（cross-encoder），能细粒度判断相关性，但每对都要算一次，所以只用在少量候选上。</p></details>
+</div>
+<h3 id="rag-quiz">小测验</h3>
+<div class="quiz" data-ch="rag"></div>
 </section>
 <!-- ============ 7 ============ -->
 <section class="topic" id="multi">
@@ -244,19 +373,129 @@ RAG 是检索增强生成。离线阶段把文档解析、切块、向量化后�
 <h3 id="multi-core">核心概念</h3>
 <ul>
 <li><b>为什么要多个：</b>单个 Agent 工具太多、提示词太长时容易混乱。按职责拆开，每个 Agent 只有自己的提示词和少量工具，更专注、更好调试。</li>
-<li><b>常见模式：</b>
-  <ul><li><b>主管-工人（Supervisor）</b>：一个主管 Agent 拆任务、分派给专门的子 Agent，再汇总；</li>
-  <li><b>流水线（顺序）</b>：A 的输出交给 B，如"研究员 → 写作者 → 审稿人"；</li>
-  <li><b>交接（Handoff）</b>：当前 Agent 把对话转交给更合适的 Agent；</li>
-  <li><b>辩论/评审</b>：多个 Agent 互相批评，提高质量。</li></ul></li>
 <li><b>代价：</b>调用次数多、成本和延迟高；Agent 之间传递信息会丢失上下文；出错难定位。<b>能单 Agent 解决就不要多 Agent。</b></li>
 <li>框架：LangGraph（图里每个节点可以是一个 Agent）、CrewAI、AutoGen；Agent 之间的通信协议有 Google 提出的 A2A。</li>
 </ul>
-<h3 id="multi-answer">面试怎么答</h3>
+<h3 id="multi-patterns">协作模式（图解）</h3>
+<!-- 要加新模式：在 .patterns 里复制一个 .pattern 卡片，换掉 SVG 和文字即可 -->
+<div class="patterns">
+<div class="pattern">
+<h4>① 主管-工人（Supervisor / Orchestrator）</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="主管 Agent 分派任务给三个工人 Agent">
+<rect class="nd main" x="120" y="12" width="120" height="40" rx="10"/><text class="lbl b" x="180" y="37">主管 Agent</text>
+<rect class="nd" x="10" y="140" width="100" height="44" rx="10"/><text class="lbl" x="60" y="160">研究员</text><text class="lbl s" x="60" y="176">搜索工具</text>
+<rect class="nd" x="130" y="140" width="100" height="44" rx="10"/><text class="lbl" x="180" y="160">程序员</text><text class="lbl s" x="180" y="176">代码工具</text>
+<rect class="nd" x="250" y="140" width="100" height="44" rx="10"/><text class="lbl" x="300" y="160">写作者</text><text class="lbl s" x="300" y="176">文档工具</text>
+<path class="ar flow" d="M150 52 L70 138"/><path class="ar flow" d="M180 52 L180 138"/><path class="ar flow" d="M210 52 L290 138"/>
+<path class="ar back" d="M82 138 L162 54"/><path class="ar back" d="M300 138 L222 54"/>
+<text class="lbl s" x="98" y="92">分派</text><text class="lbl s" x="266" y="92">汇报</text>
+</svg>
+<p>主管理解目标、拆任务、选人分派，再汇总结果。<b>优点</b>：中心化控制，好追踪、好兜底。<b>缺点</b>：主管是瓶颈，所有信息都要过它，token 开销大。典型实现：LangGraph supervisor、"把子 Agent 当工具"。</p>
+</div>
+<div class="pattern">
+<h4>② 顺序流水线（Sequential Pipeline）</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="研究员到写作者到审稿人的流水线">
+<rect class="nd io" x="4" y="78" width="54" height="40" rx="20"/><text class="lbl" x="31" y="103">输入</text>
+<rect class="nd" x="72" y="74" width="70" height="48" rx="10"/><text class="lbl" x="107" y="103">研究员</text>
+<rect class="nd" x="158" y="74" width="70" height="48" rx="10"/><text class="lbl" x="193" y="103">写作者</text>
+<rect class="nd" x="244" y="74" width="70" height="48" rx="10"/><text class="lbl" x="279" y="103">审稿人</text>
+<rect class="nd io" x="322" y="78" width="34" height="40" rx="17"/><text class="lbl s" x="339" y="102">输出</text>
+<path class="ar flow" d="M58 98 L70 98"/><path class="ar flow" d="M142 98 L156 98"/><path class="ar flow" d="M228 98 L242 98"/><path class="ar flow" d="M314 98 L320 98"/>
+<text class="lbl s" x="149" y="150">上一个的输出 = 下一个的输入</text>
+<text class="lbl s" x="180" y="172">步骤固定，代码编排</text>
+</svg>
+<p>像工厂流水线，顺序写死。<b>优点</b>：可预测、易调试、易评估每一环。<b>缺点</b>：不灵活，前面出错会一路传到下游。其实更接近"工作流"，很多场景这样就够了。</p>
+</div>
+<div class="pattern">
+<h4>③ 辩论 / 评审（Debate / Review）</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="生成者和评审者来回修改，裁判做决定">
+<rect class="nd" x="20" y="20" width="110" height="46" rx="10"/><text class="lbl" x="75" y="40">生成者 / 正方</text><text class="lbl s" x="75" y="56">写答案</text>
+<rect class="nd alt" x="230" y="20" width="110" height="46" rx="10"/><text class="lbl" x="285" y="40">评审者 / 反方</text><text class="lbl s" x="285" y="56">挑毛病</text>
+<path class="ar flow" d="M130 34 L228 34"/><path class="ar back" d="M230 54 L132 54"/>
+<text class="lbl s" x="180" y="28">草稿</text><text class="lbl s" x="180" y="72">修改意见</text>
+<rect class="nd main" x="125" y="134" width="110" height="44" rx="10"/><text class="lbl b" x="180" y="154">裁判</text><text class="lbl s" x="180" y="170">通过 / 再来一轮</text>
+<path class="ar flow" d="M75 66 L150 132"/><path class="ar flow" d="M285 66 L210 132"/>
+</svg>
+<p>一个产出，一个批评（或两方辩论），裁判或规则决定是否通过。<b>优点</b>：质量更高，能抓出幻觉和漏洞（Reflection 的多 Agent 版）。<b>缺点</b>：成本成倍增加，可能争论不休，要设<b>最大轮次</b>和明确的通过标准。</p>
+</div>
+<div class="pattern">
+<h4>④ 层级式（Hierarchical）</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="总负责人管理组长，组长管理工人">
+<rect class="nd main" x="125" y="8" width="110" height="36" rx="10"/><text class="lbl b" x="180" y="31">总负责人</text>
+<rect class="nd alt" x="40" y="78" width="110" height="36" rx="10"/><text class="lbl" x="95" y="101">研究组长</text>
+<rect class="nd alt" x="210" y="78" width="110" height="36" rx="10"/><text class="lbl" x="265" y="101">开发组长</text>
+<path class="ar flow" d="M160 44 L105 76"/><path class="ar flow" d="M200 44 L255 76"/>
+<rect class="nd" x="6" y="150" width="74" height="34" rx="8"/><text class="lbl s" x="43" y="172">搜索员</text>
+<rect class="nd" x="96" y="150" width="74" height="34" rx="8"/><text class="lbl s" x="133" y="172">分析员</text>
+<rect class="nd" x="190" y="150" width="74" height="34" rx="8"/><text class="lbl s" x="227" y="172">前端</text>
+<rect class="nd" x="280" y="150" width="74" height="34" rx="8"/><text class="lbl s" x="317" y="172">后端</text>
+<path class="ar flow" d="M80 114 L48 148"/><path class="ar flow" d="M110 114 L130 148"/><path class="ar flow" d="M250 114 L228 148"/><path class="ar flow" d="M280 114 L312 148"/>
+</svg>
+<p>主管模式的"套娃"：上层只管下一层，每个组长本身又是一个小主管。<b>优点</b>：能拆超大任务，每层上下文都不大。<b>缺点</b>：层级越多延迟越高，信息逐层转述会失真。</p>
+</div>
+<div class="pattern">
+<h4>⑤ 交接（Handoff）</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="分流 Agent 把对话交给退款或技术支持 Agent">
+<rect class="nd io" x="8" y="80" width="60" height="40" rx="20"/><text class="lbl" x="38" y="105">用户</text>
+<rect class="nd main" x="96" y="76" width="96" height="48" rx="10"/><text class="lbl b" x="144" y="98">分流 Agent</text><text class="lbl s" x="144" y="114">判断意图</text>
+<rect class="nd" x="236" y="20" width="116" height="44" rx="10"/><text class="lbl" x="294" y="47">退款 Agent</text>
+<rect class="nd" x="236" y="136" width="116" height="44" rx="10"/><text class="lbl" x="294" y="163">技术支持 Agent</text>
+<path class="ar flow" d="M68 100 L94 100"/><path class="ar flow" d="M192 90 L234 46"/><path class="ar flow dim" d="M192 112 L234 156"/>
+<text class="lbl s" x="232" y="100">转交整段对话</text>
+</svg>
+<p>当前 Agent 判断"这事该别人管"，把对话控制权整个交出去，之后由新 Agent 直接面对用户。常见于客服分流（OpenAI Agents SDK 的 handoff）。和主管模式的区别：交出去就不回来汇总。</p>
+</div>
+</div>
+
+<h3 id="multi-comm">通信方式：共享状态 vs 消息传递</h3>
+<div class="patterns">
+<div class="pattern">
+<h4>共享状态（黑板模式）</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="三个 Agent 读写同一个 State">
+<rect class="nd state" x="110" y="62" width="140" height="78" rx="8"/>
+<text class="lbl b" x="180" y="82">State</text>
+<text class="lbl mono" x="180" y="100">question · plan</text>
+<text class="lbl mono" x="180" y="116">draft · review</text>
+<text class="lbl mono" x="180" y="132">messages[]</text>
+<rect class="nd" x="10" y="10" width="84" height="36" rx="10"/><text class="lbl" x="52" y="33">规划者</text>
+<rect class="nd" x="266" y="10" width="84" height="36" rx="10"/><text class="lbl" x="308" y="33">写作者</text>
+<rect class="nd" x="138" y="160" width="84" height="36" rx="10"/><text class="lbl" x="180" y="183">评审者</text>
+<path class="ar flow" d="M80 46 L120 62"/><path class="ar flow" d="M280 46 L240 62"/><path class="ar flow" d="M180 158 L180 142"/>
+<text class="lbl s" x="70" y="70">读 / 写</text><text class="lbl s" x="292" y="70">读 / 写</text>
+</svg>
+<p>所有 Agent 读写同一个状态对象（LangGraph 的 <code>State</code>、数据库）。<b>优点</b>：信息完整、谁都能看到全貌、方便持久化和断点恢复。<b>缺点</b>：要定义好字段结构；多个 Agent 同时写需要合并规则（LangGraph 用 reducer）；全部塞给每个 Agent 会让上下文膨胀。</p>
+</div>
+<div class="pattern">
+<h4>消息传递</h4>
+<svg class="diagram" viewBox="0 0 360 200" role="img" aria-label="Agent 之间互相发送消息">
+<rect class="nd" x="10" y="80" width="84" height="40" rx="10"/><text class="lbl" x="52" y="105">Agent A</text>
+<rect class="nd" x="138" y="80" width="84" height="40" rx="10"/><text class="lbl" x="180" y="105">Agent B</text>
+<rect class="nd" x="266" y="80" width="84" height="40" rx="10"/><text class="lbl" x="308" y="105">Agent C</text>
+<path class="ar flow" d="M94 100 L136 100"/><path class="ar flow" d="M222 100 L264 100"/>
+<rect class="env" x="86" y="36" width="58" height="26" rx="4"/><text class="lbl mono" x="115" y="54">{task}</text>
+<rect class="env" x="214" y="36" width="58" height="26" rx="4"/><text class="lbl mono" x="243" y="54">{result}</text>
+<text class="lbl s" x="180" y="152">每个 Agent 只拿到发给它的消息</text>
+<text class="lbl s" x="180" y="172">可以跨进程 / 跨服务（如 A2A 协议）</text>
+</svg>
+<p>Agent 之间只传必要的信息（任务、结果、摘要）。<b>优点</b>：解耦、每个 Agent 上下文小、可以分布在不同服务甚至不同公司（A2A）。<b>缺点</b>：信息在转述中可能丢失，要设计好消息格式，全局状态难追踪。</p>
+</div>
+</div>
+
+<h3 id="multi-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="multi">
 <div class="answer"><b>问：什么时候用多 Agent？怎么设计？</b><br>
 当任务包含多个差异很大的子领域、单个 Agent 的工具和提示词过于庞杂时才拆。我常用主管-工人模式：主管负责理解目标、拆解和分派，子 Agent 各自持有专用工具和提示词，结果回到主管汇总。设计时要明确每个 Agent 的输入输出格式、共享状态放在哪里、以及最大轮次和失败兜底。同时要意识到多 Agent 成本和延迟更高，调试也更难，要配合可观测工具追踪每一步。</div>
-<h3 id="multi-faq">常见追问</h3>
-<details><summary>多个 Agent 之间怎么共享信息？</summary><p>两种：通过消息传递（把上一个的输出作为下一个的输入）；或共享状态（如 LangGraph 的 State 对象 / 数据库），各 Agent 读写其中的字段。</p></details>
+<div class="answer"><b>问：说说常见的多 Agent 协作模式。</b><br>
+主要有五种。主管-工人：中心主管分派和汇总，可控但主管是瓶颈。顺序流水线：步骤固定，上一个的输出给下一个，可预测但不灵活。辩论或评审：一个生成一个批评，质量高但成本翻倍，要限制轮次。层级式：主管套主管，适合超大任务，但层级多延迟高、信息会失真。交接：当前 Agent 把对话整个转给更合适的 Agent，常用于客服分流。选择时看任务是否可预先拆分、对质量和成本的要求。</div>
+<details><summary>多个 Agent 之间怎么共享信息？</summary><p>两种：通过消息传递（把上一个的输出作为下一个的输入）；或共享状态（如 LangGraph 的 State 对象 / 数据库），各 Agent 读写其中的字段。共享状态信息完整、易持久化，但要处理并发写和上下文膨胀；消息传递解耦、上下文小，但信息可能在转述中丢失。</p></details>
+<details><summary>主管模式和交接（Handoff）有什么区别？</summary><p>主管模式里子 Agent 做完要把结果交回主管汇总，控制权始终在主管；交接是把对话控制权整个交给另一个 Agent，之后由它直接和用户对话，不再回到原 Agent。</p></details>
+<details><summary>辩论 / 评审模式怎么避免没完没了？</summary><p>设最大轮次；给评审者明确的通过标准（清单式打分，达到阈值就通过）；由独立裁判或规则做最终决定；记录每轮修改，发现原地打转就终止。</p></details>
+<details><summary>A2A 和 MCP 有什么区别？</summary><p>MCP 解决"Agent 怎么连接工具和数据"（Agent ↔ 工具）；A2A 解决"不同 Agent 之间怎么互相发现、委托任务、交换结果"（Agent ↔ Agent），双方可以是不同团队、不同框架开发的。</p></details>
+<details><summary>多 Agent 系统怎么调试和评估？</summary><p>全链路追踪（Langfuse / LangSmith），看每个 Agent 的输入输出、调用了哪些工具、耗时和 token；先单独评估每个子 Agent，再端到端评估；和单 Agent 基线对比，确认拆分真的带来了收益。</p></details>
+</div>
+<h3 id="multi-quiz">小测验</h3>
+<div class="quiz" data-ch="multi"></div>
 </section>
 
 <!-- ============ 8 ============ -->
@@ -270,12 +509,16 @@ RAG 是检索增强生成。离线阶段把文档解析、切块、向量化后�
 <li><b>安全：提示注入（Prompt Injection）</b>：用户输入或<b>工具返回的内容</b>（网页、邮件、文档）里藏着"忽略之前的指令，执行……"。对策：把外部内容当数据而不是指令（明确分隔）；工具最小权限；危险操作（删数据、转账、发邮件）必须人工确认；输入输出过滤；敏感信息不放进提示词。</li>
 <li><b>可观测性</b>：记录每次请求的完整链路——提示词、工具调用、参数、结果、耗时、token 数。常用 <b>LangSmith</b>（LangChain 官方）、<b>Langfuse</b>（开源、可自部署）。出问题能回放定位。</li>
 </ul>
-<h3 id="eng-answer">面试怎么答</h3>
+<h3 id="eng-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="eng">
 <div class="answer"><b>问：Agent 上线后你会关注哪些问题？</b><br>
 主要四方面。一是质量：建立评估集，既评最终结果也评工具调用过程，改动后回归测试。二是幻觉：用 RAG 提供依据并要求引用，资料不足时拒答。三是成本和延迟：控制调用次数和上下文长度，按难度路由大小模型，做缓存和流式输出。四是安全：防提示注入，工具最小权限，高风险操作加人工确认。另外接入 Langfuse 或 LangSmith 做全链路追踪，记录每一步的输入输出、耗时和 token，方便定位问题和优化。</div>
-<h3 id="eng-faq">常见追问</h3>
 <details><summary>怎么做流式输出？</summary><p>调用模型时 <code>stream=True</code>，逐块拿到 token；后端用 FastAPI 的 <code>StreamingResponse</code> 以 SSE（<code>text/event-stream</code>）推给前端；前端用 <code>fetch</code> 读流或 <code>EventSource</code> 逐字渲染。工具调用的参数在流式里是分片到达的，要拼完整再解析。</p></details>
 <details><summary>Human-in-the-loop 是什么？</summary><p>在关键节点暂停，等人确认或修改后再继续，例如执行付款、发邮件前。LangGraph 支持中断（interrupt）和从检查点恢复。</p></details>
+</div>
+<h3 id="eng-quiz">小测验</h3>
+<div class="quiz" data-ch="eng"></div>
 </section>
 
 <!-- ============ 9 ============ -->
@@ -289,13 +532,17 @@ RAG 是检索增强生成。离线阶段把文档解析、切块、向量化后�
 <li><b>MCP（Model Context Protocol）</b>：Anthropic 2024 年提出的开放协议，统一"AI 应用如何连接外部工具和数据"。<b>MCP Server</b> 暴露工具（tools）、资源（resources）、提示模板（prompts）；<b>MCP Client</b>（在 Claude Desktop、Cursor 等宿主应用里）连接 Server，发现并调用它们。传输方式有 stdio（本地进程）和 HTTP（Streamable HTTP）。Python 可用官方 SDK 或 FastMCP 快速写 Server。</li>
 <li><b>Function Calling 和 MCP 的关系</b>：Function Calling 是模型的能力和 API 格式（模型怎么表达"调哪个工具"）；MCP 是工具的接入标准（工具怎么被发现、怎么被调用）。MCP 解决的是 M 个应用 × N 个工具要各写一遍集成的问题，写一次 Server，所有支持 MCP 的应用都能用。最终模型调用 MCP 工具时，底层仍然是 Function Calling。</li>
 </ul>
-<h3 id="framework-answer">面试怎么答</h3>
+<h3 id="framework-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="framework">
 <div class="answer"><b>问：为什么用 LangGraph？和自己写循环比有什么好处？</b><br>
 自己写循环能理解原理，但真实项目需要分支、循环、状态持久化、断点恢复、人工审批、多 Agent 协作和可视化调试，这些手写很容易乱。LangGraph 把流程建模成状态图，节点是步骤、边是流转规则，关键路径可以用代码固定，局部再交给模型决策，可控性比纯 ReAct 循环更好，还自带检查点做记忆和恢复。</div>
 <div class="answer"><b>问：MCP 是什么？解决什么问题？</b><br>
 MCP 是一个让 AI 应用以统一方式连接外部工具和数据的开放协议，采用客户端-服务器架构。工具提供方实现一次 MCP Server，暴露 tools、resources、prompts，任何支持 MCP 的客户端都能自动发现和调用，避免每个应用、每个工具都写一遍定制集成。它和 Function Calling 是互补的：MCP 管工具怎么接入，Function Calling 管模型怎么决定调用。</div>
-<h3 id="framework-faq">常见追问</h3>
 <details><summary>MCP 有什么安全风险？</summary><p>第三方 Server 可能返回恶意内容（提示注入），或工具描述被篡改诱导模型；权限过大可能误删数据。要只用可信 Server、最小权限、敏感操作人工确认。</p></details>
+</div>
+<h3 id="framework-quiz">小测验</h3>
+<div class="quiz" data-ch="framework"></div>
 </section>
 
 <!-- ============ 10 ============ -->
@@ -315,13 +562,17 @@ MCP 是一个让 AI 应用以统一方式连接外部工具和数据的开放协
   <li><b>上下文窗口</b>：一次能处理的最大 token 数（输入 + 输出），受注意力计算量（随长度平方增长）和显存限制。</li></ul></li>
 </ol>
 <div class="tip">推荐学习：Andrej Karpathy 的 <a href="https://karpathy.ai/zero-to-hero.html" target="_blank" rel="noopener">Neural Networks: Zero to Hero</a>，风格和 fast.ai 很像，从代码出发，最后用 PyTorch 从零手写一个小 GPT。建议主线做 Agent 项目，副线每周看一两集。</div>
-<h3 id="llm-answer">面试怎么答</h3>
+<h3 id="llm-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="llm">
 <div class="answer"><b>问：简单讲讲注意力机制。</b><br>
 注意力让每个 token 根据上下文动态决定关注哪些其他 token。具体是把每个 token 的向量投影成 Q、K、V 三个向量，用当前 token 的 Q 和所有 token 的 K 做点积，除以根号 d 防止数值过大，经过 softmax 得到注意力权重，再用权重对 V 加权求和，得到融合了上下文的新表示。多头注意力是并行做多组，让模型从不同角度关注信息。整个过程本质就是矩阵乘法加 softmax，可以高度并行。</div>
-<h3 id="llm-faq">常见追问</h3>
 <details><summary>为什么要除以 √d？</summary><p>维度 d 大时点积数值会很大，softmax 会变得非常尖锐（接近 one-hot），梯度变小、训练不稳定。除以 √d 让数值保持在合适范围。</p></details>
 <details><summary>temperature 设为 0 就一定输出相同吗？</summary><p>理论上接近贪心解码（每次选概率最高的），但由于 GPU 浮点计算、批处理等因素，实际服务中也不保证完全一致。</p></details>
 <details><summary>为什么模型会"幻觉"？</summary><p>它的训练目标是生成"看起来最可能的下一个 token"，而不是"真实的事实"；遇到不知道的内容也会生成流畅但错误的文字。</p></details>
+</div>
+<h3 id="llm-quiz">小测验</h3>
+<div class="quiz" data-ch="llm"></div>
 </section>
 <!-- ============ 11 ============ -->
 <section class="topic" id="code">
@@ -522,9 +773,14 @@ while True:
     if q in ("q", "退出"):
         break
     print("\n顾问：", agent_turn(q))</code></pre>
-<h3 id="code-faq">常见追问</h3>
+<h3 id="code-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="code">
 <details><summary>TF-IDF 版和真正的 RAG 差在哪？</summary><p>流程完全一样，差别只在向量化：TF-IDF 只比字面重合，本质更像关键词检索；换成 embedding 模型（如 bge）就是语义检索，再把 numpy 计算换成向量数据库即可。</p></details>
 <details><summary>下一步怎么升级这个项目？</summary><p>换语义 embedding + 混合检索；加查询改写；用 LangGraph 重写循环做对比；用 FastAPI 包成接口并支持 SSE 流式；分数存 SQLite → PostgreSQL；Docker 部署上线。</p></details>
+</div>
+<h3 id="code-quiz">小测验</h3>
+<div class="quiz" data-ch="code"></div>
 </section>
 
 <!-- ============ 12 ============ -->
@@ -561,6 +817,17 @@ while True:
 <li><b>一定要有上线的真实项目</b>，能讲清遇到的问题（模型乱调工具、上下文太长、回答太慢）和解决办法。</li>
 <li>加分项（微调、Dify）有余力再看。</li>
 </ol>
+<h3 id="jd-cards">面试卡片</h3>
+<p class="hint">点卡片翻面看参考答案，标记「会 / 不会」，进度自动保存。</p>
+<div class="deck" data-ch="jd">
+<div class="answer"><b>问：你为什么从前端转 AI Agent / 全栈？你有什么优势？</b><br>
+Agent 应用的体验很大程度在前端：流式输出、对话界面、把工具调用过程可视化，这些正是我擅长的。同时我在补齐后端：用 Python + FastAPI 写接口，PostgreSQL 存数据，Docker 部署，并且亲手实现了 Function Calling 循环和 RAG，理解模型和程序各自负责什么。所以我能独立把一个 Agent 应用从界面到后端到上线完整做出来。</div>
+<details><summary>按 JD 统计，Agent 岗位的"必备五件套"是什么？</summary><p>Agent 框架（LangChain / LangGraph，24/24）、RAG（24/24）、Python（20/24）、Function / Tool Calling（18/24）、向量数据库 / Embedding（17/24）。</p></details>
+<details><summary>JD 里"常见"但容易被忽视的是哪些？</summary><p>评估与可观测（14/24，LangSmith、Langfuse）、FastAPI（13）、Docker（12）、数据库（11）、记忆管理（约 11）、MCP（10）、多 Agent（10）。</p></details>
+<details><summary>面试里怎么介绍自己的 Agent 项目？</summary><p>按"背景 → 架构 → 难点 → 结果"讲：做了什么（AI 面试官网站）、架构（FastAPI + Agent 循环 + RAG + PostgreSQL + 流式前端）、遇到的问题和解决办法（模型乱调工具 → 改 description 和校验重试；上下文太长 → 摘要；回答慢 → 流式 + 缓存）、效果数据（评估集准确率、响应时间）。一定要有上线地址。</p></details>
+</div>
+<h3 id="jd-quiz">小测验</h3>
+<div class="quiz" data-ch="jd"></div>
 </section>
 
 <!-- ============ 13 ============ -->
@@ -579,6 +846,17 @@ while True:
 <tr><td>中文输出乱码</td><td>多是读取输出的编码问题（如被其他程序以 GBK 读取）。自己的 PowerShell 一般正常；可设 <code>$env:PYTHONIOENCODING="utf-8"</code>。</td></tr>
 </table>
 <div class="tip">上传 GitHub 前：确认代码里没有 Key，把 <code>.venv/</code> 加进 <code>.gitignore</code>。</div>
+<h3 id="env-cards">面试卡片</h3>
+<p class="hint">这一章是踩坑复盘，卡片用来自测排错思路。</p>
+<div class="deck" data-ch="env">
+<details><summary><code>os.environ["DEEPSEEK_API_KEY"]</code> 方括号里该写什么？</summary><p>环境变量的<b>名字</b>，程序会用它去查对应的值。把 Key 本身写进去会报 <code>KeyError</code>，还会让 Key 出现在报错信息里。</p></details>
+<details><summary><code>$env:X="..."</code> 和 <code>setx X "..."</code> 有什么区别？</summary><p><code>$env:</code> 只对当前 PowerShell 窗口（进程）有效，关掉就没了；<code>setx</code> 写入用户环境变量，永久有效，但要<b>重新打开</b>窗口才能读到。</p></details>
+<details><summary>pip 报 <code>from versions: none</code> 怎么排查？</summary><p>说明 pip 没连上软件源。换国内镜像并加 <code>--trusted-host</code>；加 <code>-v</code> 看卡在哪；检查 VPN / 代理设置；确认 Python 版本不太老。</p></details>
+<details><summary>为什么要用虚拟环境？怎么建？</summary><p>每个项目依赖独立，互不影响，也不会污染别的软件自带的 Python。<code>python -m venv .venv</code> 建，<code>.\.venv\Scripts\Activate.ps1</code> 激活，提示禁止运行脚本就先 <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>。</p></details>
+<details><summary>装了 scikit-learn 还是 <code>No module named 'sklearn'</code>？</summary><p>包名 <code>scikit-learn</code>、导入名 <code>sklearn</code>，名字不同是正常的。仍报错多半是 pip 和 python 不是同一个解释器，用 <code>python -m pip install</code> 装。</p></details>
+</div>
+<h3 id="env-quiz">小测验</h3>
+<div class="quiz" data-ch="env"></div>
 </section>
 
 <div id="noResult">没有找到匹配的内容，换个关键词试试。</div>
@@ -586,6 +864,10 @@ while True:
 </main>
 </div>
 <button class="icon" id="toTop" aria-label="回到顶部">↑</button>
+<script src="data.js"></script>
+<script src="rag-corpus.js"></script>
+<script src="tfidf.js"></script>
+<script src="widgets.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
